@@ -1,195 +1,158 @@
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600&display=swap');
+
 :root {
-    --bg-color: #1a1a2e;
-    --flask-border: #c0c0c0;
-    --text-color: #f0e6d2;
-    --primary-font: 'Cinzel', serif;
-    --secondary-font: 'Roboto', sans-serif;
-    --color-1: #ff3b3b; /* Rojo Fuego */
-    --color-2: #34c759; /* Verde Esmeralda */
-    --color-3: #007aff; /* Azul Zafiro */
-    --color-4: #ffcc00; /* Amarillo Solar */
-    --color-5: #af52de; /* Púrpura Amatista */
-    --color-6: #5ac8fa; /* Cian Celestial */
-    --color-7: #ff9500; /* Naranja Ámbar */
-    --color-8: #ff2d55; /* Rosa Rubí */
+    --bg-color: #f4f7f9;
+    --tube-color: #e1e5e8;
+    --text-color: #333;
+    --button-bg: #fff;
+    --button-shadow: #d1d9e6;
+    --accent-color: #5b87e3;
+    
+    /* Paleta de colores para las bolas */
+    --color-1: #e74c3c; /* Rojo */
+    --color-2: #2ecc71; /* Verde */
+    --color-3: #3498db; /* Azul */
+    --color-4: #f1c40f; /* Amarillo */
+    --color-5: #9b59b6; /* Morado */
+    --color-6: #e67e22; /* Naranja */
+    --color-7: #1abc9c; /* Turquesa */
+    --color-8: #d35400; /* Calabaza */
 }
 
 body {
     background-color: var(--bg-color);
-    background-image: radial-gradient(circle at 20% 20%, rgba(255, 255, 255, 0.05), transparent 30%),
-                      radial-gradient(circle at 80% 70%, rgba(175, 82, 222, 0.1), transparent 40%);
-    color: var(--text-color);
-    font-family: var(--secondary-font);
+    font-family: 'Poppins', sans-serif;
     display: flex;
-    flex-direction: column;
-    align-items: center;
     justify-content: center;
+    align-items: center;
     min-height: 100vh;
     margin: 0;
-    overflow: hidden;
+    color: var(--text-color);
 }
 
-header {
+.game-wrapper {
+    width: 100%;
+    max-width: 500px;
+    padding: 20px;
     text-align: center;
-    margin-bottom: 20px;
 }
 
-header h1 {
-    font-family: var(--primary-font);
-    font-weight: 700;
-    font-size: 3em;
-    margin: 0;
-    text-shadow: 0 0 10px var(--color-5);
+h1 {
+    font-weight: 600;
+    margin-bottom: 0;
 }
 
-header p {
-    font-size: 1.2em;
-    margin: 5px;
+p {
+    font-weight: 300;
+    margin-top: 5px;
 }
 
-#game-container {
+#game-board {
     display: flex;
     justify-content: center;
-    align-items: flex-end; /* Alinea los frascos en la parte inferior */
+    align-items: flex-end; /* Alinea los tubos en su base */
     flex-wrap: wrap;
     gap: 20px;
-    padding: 20px;
-    min-height: 300px;
+    margin: 30px 0;
+    min-height: 250px;
 }
 
-.flask {
-    width: 60px;
-    height: 240px; /* 4 bolas * 60px */
-    border: 3px solid var(--flask-border);
-    border-top: none;
-    border-radius: 0 0 30px 30px;
-    background-color: rgba(255, 255, 255, 0.05);
+.tube {
+    width: 50px;
+    height: 200px; /* 4 bolas * 50px */
+    background-color: var(--tube-color);
+    border-radius: 0 0 25px 25px;
     display: flex;
-    flex-direction: column-reverse; /* Las bolas se apilan desde abajo */
+    flex-direction: column-reverse;
     cursor: pointer;
-    transition: transform 0.2s ease, box-shadow 0.2s ease;
-    position: relative;
+    transition: transform 0.2s ease;
+    border: 3px solid transparent;
 }
 
-.flask::before { /* Simula el cuello del frasco */
-    content: '';
-    position: absolute;
-    top: -10px;
-    left: 50%;
-    transform: translateX(-50%);
-    width: 70%;
-    height: 10px;
-    border: 3px solid var(--flask-border);
-    border-bottom: none;
-    border-radius: 10px 10px 0 0;
+.tube.selected {
+    transform: translateY(-10px) scale(1.05);
+    border: 3px solid var(--accent-color);
 }
 
-
-.flask.completed {
-    box-shadow: 0 0 20px 5px gold;
-    animation: pulse 1.5s infinite;
+.tube.hint {
+    animation: pulse 1s infinite;
 }
 
 @keyframes pulse {
-    0% { box-shadow: 0 0 20px 5px gold; }
-    50% { box-shadow: 0 0 30px 10px gold; }
-    100% { box-shadow: 0 0 20px 5px gold; }
+    0% { box-shadow: 0 0 0 0 rgba(91, 135, 227, 0.7); }
+    70% { box-shadow: 0 0 0 10px rgba(91, 135, 227, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(91, 135, 227, 0); }
 }
-
 
 .ball {
-    width: 50px;
-    height: 50px;
+    width: 44px;
+    height: 44px;
     border-radius: 50%;
-    margin: 5px;
-    box-sizing: border-box;
-    transition: transform 0.3s ease-in-out;
-    position: relative;
-}
-/* Estilos para que parezcan orbes mágicos */
-.ball::after {
-    content: '';
-    position: absolute;
-    top: 5px;
-    left: 10px;
-    width: 15px;
-    height: 15px;
-    border-radius: 50%;
-    background: rgba(255, 255, 255, 0.7);
-    filter: blur(2px);
+    margin: 3px;
+    transition: transform 0.3s ease-out;
 }
 
-/* Colores de las esencias */
-.ball[data-color="1"] { background: radial-gradient(circle at 65% 35%, white, var(--color-1)); }
-.ball[data-color="2"] { background: radial-gradient(circle at 65% 35%, white, var(--color-2)); }
-.ball[data-color="3"] { background: radial-gradient(circle at 65% 35%, white, var(--color-3)); }
-.ball[data-color="4"] { background: radial-gradient(circle at 65% 35%, white, var(--color-4)); }
-.ball[data-color="5"] { background: radial-gradient(circle at 65% 35%, white, var(--color-5)); }
-.ball[data-color="6"] { background: radial-gradient(circle at 65% 35%, white, var(--color-6)); }
-.ball[data-color="7"] { background: radial-gradient(circle at 65% 35%, white, var(--color-7)); }
-.ball[data-color="8"] { background: radial-gradient(circle at 65% 35%, white, var(--color-8)); }
-
-
-.ball.selected {
-    transform: translateY(-70px);
-    box-shadow: 0 15px 25px rgba(0,0,0,0.5);
+.ball.selected-ball {
+    transform: translateY(-60px);
 }
 
-.controls {
-    margin-top: 20px;
+/* --- Colores de Bolas --- */
+.ball[data-color="1"] { background-color: var(--color-1); }
+.ball[data-color="2"] { background-color: var(--color-2); }
+.ball[data-color="3"] { background-color: var(--color-3); }
+.ball[data-color="4"] { background-color: var(--color-4); }
+.ball[data-color="5"] { background-color: var(--color-5); }
+.ball[data-color="6"] { background-color: var(--color-6); }
+.ball[data-color="7"] { background-color: var(--color-7); }
+.ball[data-color="8"] { background-color: var(--color-8); }
+
+
+footer {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+}
+
+.controls, .power-ups {
+    display: flex;
+    justify-content: center;
+    gap: 15px;
 }
 
 button {
-    font-family: var(--primary-font);
-    font-size: 1.2em;
-    padding: 10px 20px;
-    border: 2px solid var(--flask-border);
-    background-color: transparent;
-    color: var(--text-color);
+    padding: 12px 20px;
+    border: none;
+    border-radius: 10px;
+    background-color: var(--button-bg);
+    box-shadow: 3px 3px 6px var(--button-shadow), -3px -3px 6px #fff;
     cursor: pointer;
-    transition: all 0.3s ease;
-    margin: 0 10px;
+    font-family: 'Poppins', sans-serif;
+    font-weight: 400;
+    color: var(--text-color);
+    transition: all 0.2s ease;
 }
 
 button:hover {
-    background-color: var(--color-5);
-    border-color: var(--color-5);
-    box-shadow: 0 0 10px var(--color-5);
+    box-shadow: 1px 1px 2px var(--button-shadow), -1px -1px 2px #fff;
+    color: var(--accent-color);
 }
 
-/* Modal de victoria */
+button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    box-shadow: none;
+}
+
+/* --- Modal --- */
 #win-modal {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background-color: rgba(0, 0, 0, 0.7);
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    z-index: 100;
-    opacity: 1;
-    transition: opacity 0.3s ease;
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    background-color: rgba(0,0,0,0.5); display: flex; justify-content: center; align-items: center;
 }
-
-#win-modal.hidden {
-    opacity: 0;
-    pointer-events: none;
-}
-
 .modal-content {
-    background: var(--bg-color);
-    padding: 40px;
-    border-radius: 10px;
-    border: 2px solid var(--color-4);
-    text-align: center;
-    box-shadow: 0 0 30px var(--color-4);
+    background: var(--bg-color); padding: 30px; border-radius: 15px; text-align: center;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.2);
 }
+.modal-content h2 { margin-top: 0; }
+#next-level-btn { background-color: var(--accent-color); color: white; }
 
-.modal-content h2 {
-    font-family: var(--primary-font);
-    font-size: 2.5em;
-    color: var(--color-4);
-    margin-top: 0;
-}
+.hidden { display: none; }
