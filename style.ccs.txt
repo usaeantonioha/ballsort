@@ -1,0 +1,195 @@
+:root {
+    --bg-color: #1a1a2e;
+    --flask-border: #c0c0c0;
+    --text-color: #f0e6d2;
+    --primary-font: 'Cinzel', serif;
+    --secondary-font: 'Roboto', sans-serif;
+    --color-1: #ff3b3b; /* Rojo Fuego */
+    --color-2: #34c759; /* Verde Esmeralda */
+    --color-3: #007aff; /* Azul Zafiro */
+    --color-4: #ffcc00; /* Amarillo Solar */
+    --color-5: #af52de; /* Púrpura Amatista */
+    --color-6: #5ac8fa; /* Cian Celestial */
+    --color-7: #ff9500; /* Naranja Ámbar */
+    --color-8: #ff2d55; /* Rosa Rubí */
+}
+
+body {
+    background-color: var(--bg-color);
+    background-image: radial-gradient(circle at 20% 20%, rgba(255, 255, 255, 0.05), transparent 30%),
+                      radial-gradient(circle at 80% 70%, rgba(175, 82, 222, 0.1), transparent 40%);
+    color: var(--text-color);
+    font-family: var(--secondary-font);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    margin: 0;
+    overflow: hidden;
+}
+
+header {
+    text-align: center;
+    margin-bottom: 20px;
+}
+
+header h1 {
+    font-family: var(--primary-font);
+    font-weight: 700;
+    font-size: 3em;
+    margin: 0;
+    text-shadow: 0 0 10px var(--color-5);
+}
+
+header p {
+    font-size: 1.2em;
+    margin: 5px;
+}
+
+#game-container {
+    display: flex;
+    justify-content: center;
+    align-items: flex-end; /* Alinea los frascos en la parte inferior */
+    flex-wrap: wrap;
+    gap: 20px;
+    padding: 20px;
+    min-height: 300px;
+}
+
+.flask {
+    width: 60px;
+    height: 240px; /* 4 bolas * 60px */
+    border: 3px solid var(--flask-border);
+    border-top: none;
+    border-radius: 0 0 30px 30px;
+    background-color: rgba(255, 255, 255, 0.05);
+    display: flex;
+    flex-direction: column-reverse; /* Las bolas se apilan desde abajo */
+    cursor: pointer;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+    position: relative;
+}
+
+.flask::before { /* Simula el cuello del frasco */
+    content: '';
+    position: absolute;
+    top: -10px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 70%;
+    height: 10px;
+    border: 3px solid var(--flask-border);
+    border-bottom: none;
+    border-radius: 10px 10px 0 0;
+}
+
+
+.flask.completed {
+    box-shadow: 0 0 20px 5px gold;
+    animation: pulse 1.5s infinite;
+}
+
+@keyframes pulse {
+    0% { box-shadow: 0 0 20px 5px gold; }
+    50% { box-shadow: 0 0 30px 10px gold; }
+    100% { box-shadow: 0 0 20px 5px gold; }
+}
+
+
+.ball {
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    margin: 5px;
+    box-sizing: border-box;
+    transition: transform 0.3s ease-in-out;
+    position: relative;
+}
+/* Estilos para que parezcan orbes mágicos */
+.ball::after {
+    content: '';
+    position: absolute;
+    top: 5px;
+    left: 10px;
+    width: 15px;
+    height: 15px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.7);
+    filter: blur(2px);
+}
+
+/* Colores de las esencias */
+.ball[data-color="1"] { background: radial-gradient(circle at 65% 35%, white, var(--color-1)); }
+.ball[data-color="2"] { background: radial-gradient(circle at 65% 35%, white, var(--color-2)); }
+.ball[data-color="3"] { background: radial-gradient(circle at 65% 35%, white, var(--color-3)); }
+.ball[data-color="4"] { background: radial-gradient(circle at 65% 35%, white, var(--color-4)); }
+.ball[data-color="5"] { background: radial-gradient(circle at 65% 35%, white, var(--color-5)); }
+.ball[data-color="6"] { background: radial-gradient(circle at 65% 35%, white, var(--color-6)); }
+.ball[data-color="7"] { background: radial-gradient(circle at 65% 35%, white, var(--color-7)); }
+.ball[data-color="8"] { background: radial-gradient(circle at 65% 35%, white, var(--color-8)); }
+
+
+.ball.selected {
+    transform: translateY(-70px);
+    box-shadow: 0 15px 25px rgba(0,0,0,0.5);
+}
+
+.controls {
+    margin-top: 20px;
+}
+
+button {
+    font-family: var(--primary-font);
+    font-size: 1.2em;
+    padding: 10px 20px;
+    border: 2px solid var(--flask-border);
+    background-color: transparent;
+    color: var(--text-color);
+    cursor: pointer;
+    transition: all 0.3s ease;
+    margin: 0 10px;
+}
+
+button:hover {
+    background-color: var(--color-5);
+    border-color: var(--color-5);
+    box-shadow: 0 0 10px var(--color-5);
+}
+
+/* Modal de victoria */
+#win-modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.7);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 100;
+    opacity: 1;
+    transition: opacity 0.3s ease;
+}
+
+#win-modal.hidden {
+    opacity: 0;
+    pointer-events: none;
+}
+
+.modal-content {
+    background: var(--bg-color);
+    padding: 40px;
+    border-radius: 10px;
+    border: 2px solid var(--color-4);
+    text-align: center;
+    box-shadow: 0 0 30px var(--color-4);
+}
+
+.modal-content h2 {
+    font-family: var(--primary-font);
+    font-size: 2.5em;
+    color: var(--color-4);
+    margin-top: 0;
+}

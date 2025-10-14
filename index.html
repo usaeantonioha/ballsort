@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Alquimia de Colores</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700&family=Roboto:wght@300&display=swap" rel="stylesheet">
+</head>
+<body>
+    <header>
+        <h1>Alquimia de Colores</h1>
+        <p>Nivel <span id="level-indicator">1</span></p>
+    </header>
+
+    <main>
+        <div id="game-container">
+            </div>
+
+        <div class="controls">
+            <button id="restart-btn">Reiniciar</button>
+            <button id="undo-btn">Deshacer</button>
+        </div>
+    </main>
+    
+    <div id="win-modal" class="hidden">
+        <div class="modal-content">
+            <h2>¡Poción Completada!</h2>
+            <p>¡Excelente trabajo, alquimista!</p>
+            <button id="next-level-btn">Siguiente Nivel</button>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
