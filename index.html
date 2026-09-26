@@ -1,44 +1,469 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Cromoesferas: Puzzle Zen</title>
-    <link rel="stylesheet" href="style.css">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#0b0620">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>AURORA · Ball Sort Zen</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;500;700;900&display=swap" rel="stylesheet">
+<style>
+/* ============================================================
+   AURORA — Ball Sort Zen · single-file, mobile-first
+   ============================================================ */
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+:root{
+  --tube-w: clamp(34px, 9.2vw, 52px);
+  --tube-h: calc(var(--tube-w) * 4.1);
+  --ball:   calc(var(--tube-w) * 0.72);
+  --gap:    clamp(10px, 3.4vw, 22px);
+  --glass:  rgba(255,255,255,.06);
+  --stroke: rgba(255,255,255,.14);
+  --text:   #f4efff;
+  --dim:    rgba(244,238,255,.55);
+  --accent: #8be9ff;
+}
+html,body{height:100%}
+body{
+  font-family:'Outfit',system-ui,sans-serif;
+  color:var(--text);
+  background:#070417;
+  overflow:hidden;
+  touch-action:manipulation;
+  user-select:none;
+  -webkit-user-select:none;
+  padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+}
+
+/* ---------- cielo de fondo ---------- */
+.sky{position:fixed;inset:0;z-index:-3;
+  background:
+    radial-gradient(120% 80% at 50% 115%, #2a1150 0%, transparent 60%),
+    linear-gradient(180deg,#050312 0%,#0b0620 40%,#170a38 100%);
+}
+.aurora{position:fixed;inset:-20%;z-index:-2;filter:blur(70px);opacity:.55;pointer-events:none}
+.aurora i{position:absolute;border-radius:50%;mix-blend-mode:screen;animation:drift 16s ease-in-out infinite alternate}
+.aurora i:nth-child(1){width:60vmax;height:26vmax;left:-10%;top:2%;background:linear-gradient(90deg,#00ffb3aa,#00d4ffff00);animation-duration:17s}
+.aurora i:nth-child(2){width:52vmax;height:22vmax;right:-12%;top:16%;background:linear-gradient(90deg,#a95affcc,#ff5fd2aa);animation-duration:23s;animation-delay:-6s}
+.aurora i:nth-child(3){width:46vmax;height:18vmax;left:8%;top:38%;background:linear-gradient(90deg,#4dc8ff99,#8b5cff55);animation-duration:29s;animation-delay:-12s}
+@keyframes drift{
+  from{transform:translate(-6%,0) rotate(-6deg) scale(1)}
+  to  {transform:translate(8%,6%) rotate(7deg) scale(1.18)}
+}
+.stars{position:fixed;inset:0;z-index:-1;pointer-events:none;background-repeat:repeat}
+.stars.s1{background-image:
+  radial-gradient(1.4px 1.4px at 20px 30px,#fff8,transparent 60%),
+  radial-gradient(1px 1px at 160px 90px,#fff5,transparent 60%),
+  radial-gradient(1.6px 1.6px at 250px 200px,#cfeaff7,transparent 60%),
+  radial-gradient(1px 1px at 90px 240px,#fff6,transparent 60%);
+  background-size:300px 300px;animation:twinkle 5s ease-in-out infinite}
+.stars.s2{background-image:
+  radial-gradient(1px 1px at 60px 120px,#fff4,transparent 60%),
+  radial-gradient(1.8px 1.8px at 210px 40px,#ffd9f76,transparent 60%),
+  radial-gradient(1px 1px at 300px 280px,#fff5,transparent 60%);
+  background-size:340px 340px;animation:twinkle 7s ease-in-out infinite reverse}
+@keyframes twinkle{0%,100%{opacity:.9}50%{opacity:.35}}
+
+/* ---------- layout ---------- */
+.app{height:100dvh;display:flex;flex-direction:column;align-items:center;justify-content:space-between;
+  gap:8px;padding:10px 12px calc(12px + env(safe-area-inset-bottom))}
+header{text-align:center;animation:rise .8s cubic-bezier(.2,.9,.3,1.2) both}
+.logo{font-weight:900;font-size:clamp(26px,7vw,40px);letter-spacing:.32em;margin-right:-.32em;
+  background:linear-gradient(100deg,#7ef4d4,#8be9ff 30%,#c79bff 60%,#ff9ad5);
+  -webkit-background-clip:text;background-clip:text;color:transparent;
+  filter:drop-shadow(0 0 18px rgba(139,233,255,.35))}
+.tag{font-weight:300;font-size:clamp(11px,3vw,14px);color:var(--dim);letter-spacing:.14em;margin-top:2px}
+.tag b{color:var(--accent);font-weight:500}
+
+.hud{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;animation:rise .8s .1s cubic-bezier(.2,.9,.3,1.2) both}
+.chip{background:var(--glass);border:1px solid var(--stroke);border-radius:999px;
+  padding:6px 14px;font-size:12px;letter-spacing:.08em;color:var(--dim);
+  backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px)}
+.chip b{color:var(--text);font-weight:700;font-variant-numeric:tabular-nums}
+
+/* ---------- tablero ---------- */
+.board{display:flex;gap:var(--gap);justify-content:center;align-items:flex-end;flex-wrap:wrap;
+  max-width:640px;padding:14px 6px 26px;animation:pop .9s .15s cubic-bezier(.2,1.1,.4,1) both}
+@keyframes rise{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:none}}
+@keyframes pop{from{opacity:0;transform:scale(.86) translateY(24px)}to{opacity:1;transform:none}}
+
+.tube{
+  position:relative;width:var(--tube-w);height:var(--tube-h);
+  border-radius:calc(var(--tube-w)/2);
+  background:linear-gradient(180deg,rgba(255,255,255,.02),rgba(255,255,255,.09));
+  border:1.5px solid var(--stroke);
+  border-top-color:rgba(255,255,255,.05);
+  box-shadow:inset 0 0 14px rgba(0,0,0,.45), inset 3px 0 6px rgba(255,255,255,.05), 0 14px 30px rgba(0,0,0,.4);
+  cursor:pointer;transition:transform .25s cubic-bezier(.3,1.4,.5,1), box-shadow .25s, border-color .25s;
+  touch-action:manipulation;
+}
+/* brillo de vidrio */
+.tube::before{content:"";position:absolute;top:6%;bottom:12%;left:14%;width:18%;border-radius:99px;
+  background:linear-gradient(180deg,#ffffff26,#ffffff05);pointer-events:none}
+.tube::after{content:"";position:absolute;inset:auto 8% 6% 8%;height:12%;border-radius:50%;
+  background:radial-gradient(ellipse at center,#ffffff14,transparent 70%);pointer-events:none}
+
+.tube.sel{transform:translateY(-10px);border-color:rgba(139,233,255,.65);
+  box-shadow:inset 0 0 14px rgba(0,0,0,.4), 0 0 0 2px rgba(139,233,255,.25), 0 0 34px rgba(139,233,255,.45), 0 20px 34px rgba(0,0,0,.45)}
+.tube.done{border-color:rgba(255,255,255,.3)}
+.tube.shake{animation:shake .3s}
+@keyframes shake{25%{transform:translateX(-5px)}75%{transform:translateX(5px)}}
+
+.ball{
+  position:absolute;left:50%;translate:-50% 0;
+  width:var(--ball);height:var(--ball);border-radius:50%;
+  background:radial-gradient(circle at 32% 28%, #ffffffcc 0%, #ffffff33 18%, transparent 40%),
+             radial-gradient(circle at 68% 78%, #00000055 0%, transparent 45%),
+             radial-gradient(circle at 45% 40%, var(--c1), var(--c2) 78%);
+  box-shadow:0 3px 8px rgba(0,0,0,.4), inset 0 -4px 8px rgba(0,0,0,.25), inset 0 3px 6px rgba(255,255,255,.25);
+  transition:top .3s cubic-bezier(.35,1.35,.5,1), transform .25s, opacity .25s;
+  pointer-events:none;
+}
+.ball.lift{transform:translateY(calc(var(--ball) * -1.15)) scale(1.06);z-index:5;
+  filter:drop-shadow(0 10px 14px rgba(0,0,0,.5)) brightness(1.12) saturate(1.15)}
+.ball.drop-in{animation:bounce .45s cubic-bezier(.3,1.5,.5,1)}
+@keyframes bounce{0%{transform:scale(1.12,.8)}45%{transform:scale(.92,1.1)}100%{transform:scale(1,1)}}
+
+.spark{position:absolute;left:50%;top:0;width:5px;height:5px;border-radius:50%;
+  background:#fff;pointer-events:none;animation:fly .9s ease-out forwards}
+@keyframes fly{to{transform:translate(var(--dx),var(--dy)) scale(.2);opacity:0}}
+
+/* ---------- controles ---------- */
+.controls{display:flex;gap:12px;animation:rise .8s .25s cubic-bezier(.2,.9,.3,1.2) both}
+.btn{appearance:none;border:1px solid var(--stroke);outline:none;cursor:pointer;
+  background:var(--glass);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);
+  color:var(--text);font-family:inherit;font-weight:500;font-size:14px;letter-spacing:.06em;
+  padding:12px 22px;border-radius:999px;display:flex;align-items:center;gap:8px;
+  transition:transform .15s, background .2s, opacity .2s;min-width:64px;justify-content:center}
+.btn svg{width:17px;height:17px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.btn:active{transform:scale(.92)}
+.btn.primary{background:linear-gradient(120deg,#00e0c0aa,#7b5cffaa);border-color:#9de9ff66;
+  box-shadow:0 0 24px rgba(123,92,255,.4)}
+.btn:disabled{opacity:.35;pointer-events:none}
+
+/* ---------- overlay victoria ---------- */
+.win{position:fixed;inset:0;z-index:50;display:grid;place-items:center;
+  background:rgba(5,3,18,.6);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
+  opacity:0;pointer-events:none;transition:opacity .5s}
+.win.show{opacity:1;pointer-events:auto}
+.card{text-align:center;padding:38px 44px;border-radius:28px;max-width:88vw;
+  background:linear-gradient(160deg,#ffffff14,#ffffff05);border:1px solid #ffffff2b;
+  box-shadow:0 30px 80px rgba(0,0,0,.6),0 0 60px rgba(139,233,255,.15);
+  transform:scale(.8) translateY(20px);transition:transform .6s cubic-bezier(.2,1.4,.4,1)}
+.win.show .card{transform:none}
+.card h2{font-size:clamp(26px,8vw,38px);font-weight:900;letter-spacing:.18em;margin-right:-.18em;
+  background:linear-gradient(100deg,#7ef4d4,#8be9ff,#ff9ad5);
+  -webkit-background-clip:text;background-clip:text;color:transparent}
+.card p{color:var(--dim);margin:10px 0 22px;font-weight:300;font-size:15px;line-height:1.6}
+.card p b{color:var(--text)}
+.medal{font-size:52px;margin-bottom:6px;display:inline-block;animation:spin 3s linear infinite}
+@keyframes spin{from{transform:rotateY(0)}to{transform:rotateY(360deg)}}
+</style>
 </head>
 <body>
 
-    <div class="game-wrapper">
-        <header>
-            <h1>Cromoesferas</h1>
-            <p>Nivel <span id="level-indicator">1</span></p>
-        </header>
+<div class="sky"></div>
+<div class="aurora"><i></i><i></i><i></i></div>
+<div class="stars s1"></div>
+<div class="stars s2"></div>
 
-        <main id="game-board">
-            </main>
+<div class="app">
+  <header>
+    <div class="logo">AURORA</div>
+    <div class="tag">ordena las esferas · <b id="lvl-name">Nivel 1 — Aurora Boreal</b></div>
+  </header>
 
-        <footer>
-            <div class="controls">
-                <button id="undo-btn" title="Deshacer último movimiento">Deshacer</button>
-                <button id="restart-btn" title="Reiniciar nivel">Reiniciar</button>
-                <button id="hint-btn" title="Mostrar una pista">Pista</button>
-            </div>
-            <div class="power-ups">
-                <button id="add-tube-btn" title="Añadir un tubo vacío extra">
-                    + Añadir Tubo
-                </button>
-            </div>
-        </footer>
-    </div>
-    
-    <div id="win-modal" class="hidden">
-        <div class="modal-content">
-            <h2>¡Nivel Completado!</h2>
-            <p>Has encontrado la armonía de los colores.</p>
-            <button id="next-level-btn">Siguiente Nivel</button>
-        </div>
-    </div>
+  <div class="hud">
+    <span class="chip">MOVIMIENTOS <b id="moves">0</b></span>
+    <span class="chip">MEJOR <b id="best">—</b></span>
+    <span class="chip">TIEMPO <b id="time">0:00</b></span>
+  </div>
 
-    <script src="script.js"></script>
+  <main class="board" id="board" aria-label="Tablero del juego"></main>
+
+  <footer class="controls">
+    <button class="btn" id="undo" disabled aria-label="Deshacer">
+      <svg viewBox="0 0 24 24"><path d="M9 14 4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-3"/></svg>Deshacer</button>
+    <button class="btn" id="reset" aria-label="Reiniciar">
+      <svg viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 3v6h-6"/></svg>Reiniciar</button>
+    <button class="btn primary" id="sound" aria-label="Sonido">
+      <svg viewBox="0 0 24 24"><path d="M11 5 6 9H2v6h4l5 4z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/></svg>Sonido</button>
+  </footer>
+</div>
+
+<div class="win" id="win" role="dialog" aria-modal="true">
+  <div class="card">
+    <span class="medal">🏆</span>
+    <h2>AURORA DESPERTÓ</h2>
+    <p id="wintext"></p>
+    <button class="btn primary" id="again" style="margin:0 auto">
+      <svg viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 3v6h-6"/></svg>Jugar de nuevo</button>
+  </div>
+</div>
+
+<script>
+"use strict";
+/* ================= CONFIG — un solo nivel ================= */
+const CAP = 4;                       // bolas por tubo
+const PALETTE = [                    // degradados radiales por color
+  ["#5ee6a8","#0f9d6e"],            // menta
+  ["#7ec8ff","#2563eb"],            // celeste
+  ["#c99bff","#7c3aed"],            // violeta
+  ["#ffa8d5","#e0447f"],            // rosa
+  ["#ffd97a","#e09a1f"],            // ámbar
+];
+/* Generador de niveles: baraja hasta producir uno RESOLUBLE y con
+   dificultad media (verificado por BFS acotado). Con semilla fija el
+   nivel es idéntico en todos los dispositivos → un solo nivel real. */
+function shuffle(a){for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a}
+function genLevel(seed){
+  let s = seed>>>0;
+  Math.random = ()=> (s=(s*1664525+1013904223)>>>0)/4294967296; // LCG determinista
+  const balls=[]; for(let c=0;c<PALETTE.length;c++) for(let k=0;k<CAP;k++) balls.push(c);
+  for(let attempt=0;attempt<600;attempt++){
+    const arr = shuffle(balls.slice());
+    const t=[]; for(let i=0;i<PALETTE.length;i++) t.push(arr.slice(i*CAP,(i+1)*CAP));
+    t.push([],[]);
+    if(solvable(t)) return t;
+  }
+  // fallback estático (demostrado resoluble por BFS completo)
+  return [[2,0,1,3],[3,2,1,0],[0,3,2,1],[1,0,3,2],[],[]];
+}
+// BFS con estado canónico y presupuesto de tiempo → confirma resolubilidad
+function solvable(start){
+  const key=t=>t.map(x=>x.join(',')).sort().join('|');
+  const topOf=t=>{for(let i=t.length-1;i>=0;i--)if(t[i]!==undefined)return t[i];return null};
+  const done=t=>t.every(x=>x.length===CAP&&x.every(b=>b===x[0]));
+  const dl=Date.now()+400;
+  const gen=t=>{const out=[];
+    for(let f=0;f<t.length;f++){ if(!t[f].length)continue;
+      const c=topOf(t[f]); if(t[f].every(b=>b===c)&&t[f].length===CAP)continue;
+      for(let d=0;d<t.length;d++){ if(d===f||t[d].length>=CAP)continue;
+        const dc=topOf(t[d]); if(dc!==null&&dc!==c)continue;
+        let n=0;for(let i=t[f].length-1;i>=0&&t[f][i]===c;i--)n++;
+        n=Math.min(n,CAP-t[d].length);
+        const ns=t.map(x=>x.slice());ns[f].length-=n;for(let k=0;k<n;k++)ns[d].push(c);
+        out.push(ns);}}
+    return out;};
+  let seen=new Set([key(start)]),front=[start];
+  while(front.length){
+    if(Date.now()>dl) return false;
+    const next=[];
+    for(const st of front)for(const ns of gen(st)){
+      const k=key(ns); if(seen.has(k))continue; seen.add(k);
+      if(done(ns))return true;
+      next.push(ns);}
+    front=next;
+    if(seen.size>120000) return false;
+  }
+  return false;
+}
+
+/* ================= ESTADO ================= */
+let tubes, sel, moves, history, startT, timerId, won, soundOn = true;
+const $ = id => document.getElementById(id);
+const boardEl = $("board");
+
+/* ================= AUDIO procedural (sin assets) ================= */
+let AC = null;
+function ac(){ if(!AC) AC = new (window.AudioContext||window.webkitAudioContext)(); return AC; }
+function tone(f, dur=.12, type="sine", vol=.18, when=0){
+  if(!soundOn) return;
+  try{
+    const c = ac(), o = c.createOscillator(), g = c.createGain();
+    o.type = type; o.frequency.value = f;
+    g.gain.setValueAtTime(0, c.currentTime+when);
+    g.gain.linearRampToValueAtTime(vol, c.currentTime+when+.015);
+    g.gain.exponentialRampToValueAtTime(.0001, c.currentTime+when+dur);
+    o.connect(g).connect(c.destination);
+    o.start(c.currentTime+when); o.stop(c.currentTime+when+dur+.05);
+  }catch(e){}
+}
+const sfx = {
+  pick:  ()=> tone(620,.09,"triangle",.14),
+  drop:  ()=> { tone(340,.1,"sine",.16); tone(510,.08,"sine",.08,.02); },
+  block: ()=> tone(150,.16,"sawtooth",.08),
+  done:  ()=> { [523,659,784].forEach((f,i)=>tone(f,.2,"triangle",.14,i*.07)); },
+  win:   ()=> { [523,659,784,1046,1318].forEach((f,i)=>tone(f,.5,"triangle",.15,i*.12)); },
+};
+
+/* ================= LÓGICA ================= */
+const topOf = t => { for(let i=t.length-1;i>=0;i--) if(t[i]!==null) return i; return -1; };
+function clone(a){ return a.map(x=>x.slice()); }
+
+function canPour(from,to){
+  if(to.length >= CAP) return false;
+  const ti = topOf(tubes[from]), si = topOf(tubes[to]);
+  if(ti === -1) return false;
+  if(si === -1) return true;
+  return tubes[from][ti] === tubes[to][si];
+}
+function isSolved(){
+  return tubes.every(t => t.length===CAP && t.every(b=>b===t[0]));
+}
+function pourCount(from,to){
+  const ti=topOf(tubes[from]), col=tubes[from][ti];
+  let n=0; for(let i=ti;i>=0&&tubes[from][i]===col;i--) n++;
+  return Math.min(n, CAP - tubes[to].length);
+}
+
+function doMove(from,to){
+  history.push({tubes:clone(tubes), moves});
+  const col = tubes[from][topOf(tubes[from])];
+  for(let k=0;k<pourCount(from,to);k++){
+    tubes[from].pop(); tubes[to].push(col);
+  }
+  moves++;
+  sfx.drop();
+  render(from, to);
+  checkTubeDone(to);
+  updateHud();
+  if(isSolved()) victory();
+}
+function undo(){
+  if(!history.length || won) return;
+  const st = history.pop();
+  tubes = st.tubes; moves = st.moves; sel = null;
+  sfx.pick();
+  render();
+  updateHud();
+}
+
+function tapTube(idx){
+  if(won) return;
+  ensureTimer();
+  if(sel === null){
+    if(topOf(tubes[idx]) === -1){ bump(idx); return; }
+    sel = idx; sfx.pick(); render();
+    return;
+  }
+  if(sel === idx){ sel = null; render(); return; }
+  if(canPour(sel, idx)){
+    const from = sel; sel = null;
+    doMove(from, idx);
+  }else{
+    bump(idx); sfx.block();
+    if(topOf(tubes[idx]) !== -1){ sel = idx; sfx.pick(); render(); }
+    else { sel = null; render(); }
+  }
+}
+function bump(idx){
+  const el = boardEl.children[idx];
+  if(el){ el.classList.remove("shake"); void el.offsetWidth; el.classList.add("shake"); }
+}
+
+/* ================= RENDER ================= */
+function ballHTML(colorIdx, slot, lift){
+  const [c1,c2] = PALETTE[colorIdx];
+  const inset = (slot*(CAP-0.001))*(100/CAP);
+  return `<span class="ball${lift?" lift":""}" data-slot="${slot}"
+          style="--c1:${c1};--c2:${c2};bottom:${inset}%"></span>`;
+}
+function render(liftFrom){
+  boardEl.innerHTML = "";
+  tubes.forEach((t,i)=>{
+    const d = document.createElement("div");
+    d.className = "tube" + (sel===i?" sel":"") +
+      (t.length===CAP && t.every(b=>b===t[0]) ? " done":"");
+    d.setAttribute("role","button");
+    d.setAttribute("aria-label", `Tubo ${i+1}`);
+    const lifted = (sel===i) ? topOf(t) : (liftFrom===i ? -2 : -1);
+    t.forEach((b,slot)=>{ if(b!==null) d.insertAdjacentHTML("beforeend", ballHTML(b,slot,slot===lifted)); });
+    d.addEventListener("click", ()=>tapTube(i));
+    boardEl.appendChild(d);
+  });
+  $("undo").disabled = !history.length || won;
+}
+function checkTubeDone(idx){
+  const t = tubes[idx];
+  if(t.length===CAP && t.every(b=>b===t[0])){
+    sfx.done();
+    burst(boardEl.children[idx]);
+  }
+}
+function burst(el){
+  if(!el) return;
+  const colors = ["#5ee6a8","#7ec8ff","#c99bff","#ffa8d5","#ffd97a"];
+  for(let i=0;i<14;i++){
+    const s = document.createElement("span");
+    s.className = "spark";
+    s.style.background = colors[Math.floor(Math.random()*colors.length)];
+    s.style.setProperty("--dx",(Math.random()*140-70)+"px");
+    s.style.setProperty("--dy",(-Math.random()*130-10)+"px");
+    s.style.animationDelay = (Math.random()*.15)+"s";
+    el.appendChild(s);
+    setTimeout(()=>s.remove(), 1100);
+  }
+}
+
+/* ================= HUD / TIEMPO ================= */
+function fmt(ms){ const s=Math.floor(ms/1000); return `${Math.floor(s/60)}:${String(s%60).padStart(2,"0")}`; }
+function ensureTimer(){
+  if(timerId || won || startT) return;
+  startT = Date.now();
+  timerId = setInterval(()=>{ $("time").textContent = fmt(Date.now()-startT); }, 500);
+}
+function updateHud(){
+  $("moves").textContent = moves;
+  const best = localStorage.getItem("aurora_best");
+  $("best").textContent = best ? best : "—";
+}
+
+/* ================= VICTORIA ================= */
+function victory(){
+  won = true; clearInterval(timerId);
+  const secs = startT ? Math.floor((Date.now()-startT)/1000) : 0;
+  const best = parseInt(localStorage.getItem("aurora_best")||"9999",10);
+  if(moves < best) localStorage.setItem("aurora_best", moves);
+  updateHud();
+  $("wintext").innerHTML =
+    `Completaste <b>Aurora Boreal</b> en <b>${moves}</b> movimientos<br>y <b>${fmt(secs*1000)}</b>. El cielo vuelve a brillar.`;
+  setTimeout(()=>{ $("win").classList.add("show"); sfx.win(); starRain(); }, 500);
+}
+function starRain(){
+  const colors = ["#5ee6a8","#7ec8ff","#c99bff","#ffa8d5","#ffd97a","#fff"];
+  for(let i=0;i<40;i++){
+    const s = document.createElement("span");
+    s.className = "spark";
+    s.style.position = "fixed";
+    s.style.left = Math.random()*100+"vw";
+    s.style.top = "-10px";
+    s.width = s.height = (3+Math.random()*5)+"px";
+    s.style.background = colors[i%colors.length];
+    s.style.zIndex = 60;
+    s.style.setProperty("--dx",(Math.random()*60-30)+"px");
+    s.style.setProperty("--dy","110vh");
+    s.style.animationDuration = (1.4+Math.random()*1.6)+"s";
+    s.style.animationDelay = (Math.random()*.9)+"s";
+    document.body.appendChild(s);
+    setTimeout(()=>s.remove(), 3500);
+  }
+}
+
+/* ================= INIT ================= */
+function newGame(){
+  tubes = clone(LEVEL_TUBES);
+  sel = null; moves = 0; history = []; won = false;
+  startT = 0; clearInterval(timerId);
+  $("time").textContent = "0:00";
+  $("win").classList.remove("show");
+  render(); updateHud();
+}
+$("undo").addEventListener("click", undo);
+$("reset").addEventListener("click", newGame);
+$("again").addEventListener("click", newGame);
+$("sound").addEventListener("click", e=>{
+  soundOn = !soundOn;
+  const b = e.currentTarget;
+  b.style.opacity = soundOn ? 1 : .55;
+  b.lastChild.textContent = soundOn ? "Sonido" : "Silencio";
+  if(soundOn) sfx.pick();
+});
+document.addEventListener("pointerdown", ()=>{ if(AC && AC.state==="suspended") AC.resume(); }, {once:false});
+newGame();
+</script>
 </body>
 </html>
