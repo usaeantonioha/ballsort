@@ -35,6 +35,8 @@ body{
   touch-action:manipulation;
   user-select:none;
   -webkit-user-select:none;
+  -webkit-touch-callout:none;
+  overscroll-behavior:none;
   padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
 }
 
@@ -119,13 +121,15 @@ header{text-align:center;animation:rise .8s cubic-bezier(.2,.9,.3,1.2) both}
              radial-gradient(circle at 68% 78%, #00000055 0%, transparent 45%),
              radial-gradient(circle at 45% 40%, var(--c1), var(--c2) 78%);
   box-shadow:0 3px 8px rgba(0,0,0,.4), inset 0 -4px 8px rgba(0,0,0,.25), inset 0 3px 6px rgba(255,255,255,.25);
-  transition:top .3s cubic-bezier(.35,1.35,.5,1), transform .25s, opacity .25s;
+  transition:bottom .3s cubic-bezier(.35,1.35,.5,1), translate .25s, scale .25s, filter .25s;
   pointer-events:none;
 }
-.ball.lift{transform:translateY(calc(var(--ball) * -1.15)) scale(1.06);z-index:5;
+/* bola levantada: se eleva con `translate` (no toca `bottom`, que sigue
+   anclada a su ranura) → imposible que "vuele" fuera del tubo */
+.ball.lift{translate:-50% calc(var(--ball) * -1.05);scale:1.06;z-index:5;
   filter:drop-shadow(0 10px 14px rgba(0,0,0,.5)) brightness(1.12) saturate(1.15)}
 .ball.drop-in{animation:bounce .45s cubic-bezier(.3,1.5,.5,1)}
-@keyframes bounce{0%{transform:scale(1.12,.8)}45%{transform:scale(.92,1.1)}100%{transform:scale(1,1)}}
+@keyframes bounce{0%{scale:1.12 .8}45%{scale:.92 1.1}100%{scale:1 1}}
 
 .spark{position:absolute;left:50%;top:0;width:5px;height:5px;border-radius:50%;
   background:#fff;pointer-events:none;animation:fly .9s ease-out forwards}
@@ -213,20 +217,21 @@ const PALETTE = [                    // degradados radiales por color
   ["#7ec8ff","#2563eb"],            // celeste
   ["#c99bff","#7c3aed"],            // violeta
   ["#ffa8d5","#e0447f"],            // rosa
-  ["#ffd97a","#e09a1f"],            // ámbar
 ];
-/* NIVEL ÚNICO — "Aurora Boreal". Distribución fija, verificada 100% resoluble
-   mediante búsqueda exhaustiva (BFS) con la mecánica exacta del juego
-   (vertido multi-bola): se encontró solución óptima en 11 movimientos.
-   Índice de color → PALETTE. Tubos 6 y 7 empiezan vacíos. */
+/* NIVEL ÚNICO — "Aurora Boreal". Distribución FIJA y verificada:
+   4 colores × CAP(4) bolas = 16; 4 tubos llenos + 2 vacíos.
+   Rotación cíclica [c0..c3] desplazada: resolvable en exactamente
+   13 volcados (mínimo global). Resolubilidad confirmada por BFS
+   exhaustivo sobre las reglas EXACTAS del motor y replay tap-a-tap
+   hasta la victoria con la función real `tapTube` (ver `test_game.js`).
+   Índice de color → PALETTE. Tubos 4 y 5 empiezan vacíos. */
 const LEVEL_TUBES = [
-  [0,0],          // menta     (parcialmente llena)
-  [1,1,4],        // celeste + ámbar arriba
-  [2,2,2,4],      // violeta x3 + ámbar
-  [3,3,3],        // rosa      (parcialmente llena)
-  [1,0,2,4],      // mixto
-  [3,0,1],        // mixto
-  [4],            // ámbar     (una bola)
+  [0,1,2,3],   // abajo menta · arriba rosa
+  [1,2,3,0],   // abajo celeste · arriba menta
+  [2,3,0,1],   // abajo violeta · arriba celeste
+  [3,0,1,2],   // abajo rosa · arriba violeta
+  [],          // vacío
+  [],          // vacío
 ];
 
 /* ================= ESTADO ================= */
@@ -258,29 +263,44 @@ const sfx = {
 };
 
 /* ================= LÓGICA ================= */
-const topOf = t => { for(let i=t.length-1;i>=0;i--) if(t[i]!==null) return i; return -1; };
-function clone(a){ return a.map(x=>x.slice()); }
+/* Convención de invariantes: un tubo es SIEMPRE un array compacto sin
+   `null` internos ni trailing. `topOf` devuelve el índice de la última
+   bola real (o -1). `fillHoles` es una red de seguridad defensiva por
+   si algún estado corrupto llegara desde localStorage/pruebas. */
+const topOf = t => { for(let i=t.length-1;i>=0;i--) if(t[i]!==null && t[i]!==undefined) return i; return -1; };
+function fillHoles(t){ const out=[]; for(const b of t) if(b!==null && b!==undefined) out.push(b); return out; }
+function clone(a){ return a.map(fillHoles); }
 
 function canPour(from,to){
-  if(to.length >= CAP) return false;
-  const ti = topOf(tubes[from]), si = topOf(tubes[to]);
+  if(from === to) return false;
+  const src = tubes[from], dst = tubes[to];
+  if(dst.length >= CAP) return false;
+  const ti = topOf(src);
   if(ti === -1) return false;
+  const si = topOf(dst);
   if(si === -1) return true;
-  return tubes[from][ti] === tubes[to][si];
+  return src[ti] === dst[si];
 }
 function isSolved(){
-  return tubes.every(t => t.length===CAP && t.every(b=>b===t[0]));
+  return tubes.every(t => t.length===0 || (t.length===CAP && t.every(b=>b===t[0])));
 }
+/* Nº de bolas a verter = longitud de la RACHA superior del origen,
+   limitada por el espacio libre del destino. */
 function pourCount(from,to){
-  const ti=topOf(tubes[from]), col=tubes[from][ti];
-  let n=0; for(let i=ti;i>=0&&tubes[from][i]===col;i--) n++;
-  return Math.min(n, CAP - tubes[to].length);
+  const src = tubes[from], dst = tubes[to];
+  const ti = topOf(src);
+  if(ti === -1) return 0;
+  const col = src[ti];
+  let run = 0;
+  for(let i=ti; i>=0 && src[i]===col; i--) run++;
+  return Math.max(0, Math.min(run, CAP - dst.length));
 }
 
 function doMove(from,to){
   history.push({tubes:clone(tubes), moves});
   const col = tubes[from][topOf(tubes[from])];
-  for(let k=0;k<pourCount(from,to);k++){
+  const k = pourCount(from,to);          // calcular ANTES de mutar
+  for(let i=0;i<k;i++){
     tubes[from].pop(); tubes[to].push(col);
   }
   moves++;
@@ -323,11 +343,15 @@ function bump(idx){
 }
 
 /* ================= RENDER ================= */
+/* Las bolas se colocan SIEMPRE de abajo hacia arriba con separación
+   fija (100/CAP % por ranura). Nada puede quedar "esparcido": cada
+   hijo del tubo es una bola anclada a su ranura. */
+const BALL_SLOT = 100 / CAP;                       // % de altura por ranura
 function ballHTML(colorIdx, slot, lift){
   const [c1,c2] = PALETTE[colorIdx];
-  const inset = (slot*(CAP-0.001))*(100/CAP);
-  return `<span class="ball${lift?" lift":""}" data-slot="${slot}"
-          style="--c1:${c1};--c2:${c2};bottom:${inset}%"></span>`;
+  const inset = 2 + slot*BALL_SLOT;                // 2% de margen inferior
+  return `<span class="ball${lift?" lift":""}" data-slot="${slot}"`
+       + ` style="--c1:${c1};--c2:${c2};bottom:${inset}%"></span>`;
 }
 function render(liftFrom){
   boardEl.innerHTML = "";
@@ -337,8 +361,11 @@ function render(liftFrom){
       (t.length===CAP && t.every(b=>b===t[0]) ? " done":"");
     d.setAttribute("role","button");
     d.setAttribute("aria-label", `Tubo ${i+1}`);
-    const lifted = (sel===i) ? topOf(t) : (liftFrom===i ? -2 : -1);
-    t.forEach((b,slot)=>{ if(b!==null) d.insertAdjacentHTML("beforeend", ballHTML(b,slot,slot===lifted)); });
+    const lifted = (sel===i) ? topOf(t) : -1;
+    for(let slot=0; slot<t.length; slot++){
+      const b = t[slot];
+      if(b!==null && b!==undefined) d.insertAdjacentHTML("beforeend", ballHTML(b,slot,slot===lifted));
+    }
     d.addEventListener("click", ()=>tapTube(i));
     boardEl.appendChild(d);
   });
@@ -431,6 +458,16 @@ $("sound").addEventListener("click", e=>{
 });
 document.addEventListener("pointerdown", ()=>{ if(AC && AC.state==="suspended") AC.resume(); }, {once:false});
 newGame();
+
+/* ---- export para pruebas automatizadas (nodo) ---- */
+if(typeof module==="object" && module && typeof module.exports==="object"){
+  module.exports = {
+    CAP, LEVEL_TUBES, PALETTE,
+    _setState(t){ tubes = clone(t); sel=null; moves=0; history=[]; won=false; startT=1; clearInterval(timerId); timerId=null; },
+    tapTube, canPour, pourCount, isSolved, undo, topOf,
+    _get(){ return {tubes:clone(tubes), sel, moves, won}; }
+  };
+}
 </script>
 </body>
 </html>
