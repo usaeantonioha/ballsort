@@ -18,13 +18,17 @@
    ============================================================ */
 *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 
-/* Variables: TODO el tamaño deriva de --ball (bola cuadrada).
-   Un tubo = 4 ranuras exactas + margen interior. */
+/* Variables: el tamaño del TUBO manda y la bola LO LLENA.
+   --tube-w se calcula para que los 7 tubos + separaciones quepan en el
+   ancho disponible; --ball = diámetro interno exacto del tubo → bolas
+   grandes que tocan las paredes. El alto usa toda la ranura vertical. */
 :root{
-  --ball: clamp(24px, min(11vw, 9vh), 44px);
-  --tube-w: calc(var(--ball) * 4 + 4px);
-  --tube-h: calc(var(--ball) * 4 + 12px);
-  --gap: clamp(8px, 2.6vw, 20px);
+  --gap:     clamp(6px, 1.6vw, 16px);              /* separación entre tubos */
+  --tube-w:  clamp(34px, min(calc((100vw - 16px - var(--gap) * 6) / 7),
+                             calc((100dvh - 250px) / 4.9)), 62px);
+  --tube-h:  calc(var(--tube-w) * 4.9);            /* 4 bolas + base curva */
+  --pad:     2px;                                   /* margen interior tubo */
+  --ball:    calc(var(--tube-w) - var(--pad) * 2); /* bola = ancho interno */
   --glass:  rgba(255,255,255,.06);
   --stroke: rgba(255,255,255,.14);
   --text:   #f4efff;
@@ -112,9 +116,11 @@ header{text-align:center;flex:0 0 auto;animation:rise .8s cubic-bezier(.2,.9,.3,
 
 /* CONTENEDOR DE BOLAS: columna flex con justify-content:flex-end
    → las bolas se apilan SIEMPRE desde el fondo hacia arriba por flujo DOM.
-   El padding inferior deja a la última bola asentada en la base curva. */
+   Padding = --pad lateral/inferior; arriba queda justo la ranura extra
+   de la base curva → 4 bolas exactas, sin huecos ni desbordes. */
 .ball-stack{position:absolute;inset:0;display:flex;flex-direction:column;
-  justify-content:flex-end;align-items:center;padding:2px 2px 6px}
+  justify-content:flex-end;align-items:center;
+  padding:calc(var(--tube-h) - var(--ball) * 4 - var(--pad)) var(--pad) var(--pad)}
 
 .ball{
   width:var(--ball);height:var(--ball);border-radius:50%;flex:0 0 auto;
