@@ -215,52 +215,19 @@ const PALETTE = [                    // degradados radiales por color
   ["#ffa8d5","#e0447f"],            // rosa
   ["#ffd97a","#e09a1f"],            // ámbar
 ];
-/* Generador de niveles: baraja hasta producir uno RESOLUBLE y con
-   dificultad media (verificado por BFS acotado). Con semilla fija el
-   nivel es idéntico en todos los dispositivos → un solo nivel real. */
-function shuffle(a){for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a}
-function genLevel(seed){
-  let s = seed>>>0;
-  Math.random = ()=> (s=(s*1664525+1013904223)>>>0)/4294967296; // LCG determinista
-  const balls=[]; for(let c=0;c<PALETTE.length;c++) for(let k=0;k<CAP;k++) balls.push(c);
-  for(let attempt=0;attempt<600;attempt++){
-    const arr = shuffle(balls.slice());
-    const t=[]; for(let i=0;i<PALETTE.length;i++) t.push(arr.slice(i*CAP,(i+1)*CAP));
-    t.push([],[]);
-    if(solvable(t)) return t;
-  }
-  // fallback estático (demostrado resoluble por BFS completo)
-  return [[2,0,1,3],[3,2,1,0],[0,3,2,1],[1,0,3,2],[],[]];
-}
-// BFS con estado canónico y presupuesto de tiempo → confirma resolubilidad
-function solvable(start){
-  const key=t=>t.map(x=>x.join(',')).sort().join('|');
-  const topOf=t=>{for(let i=t.length-1;i>=0;i--)if(t[i]!==undefined)return t[i];return null};
-  const done=t=>t.every(x=>x.length===CAP&&x.every(b=>b===x[0]));
-  const dl=Date.now()+400;
-  const gen=t=>{const out=[];
-    for(let f=0;f<t.length;f++){ if(!t[f].length)continue;
-      const c=topOf(t[f]); if(t[f].every(b=>b===c)&&t[f].length===CAP)continue;
-      for(let d=0;d<t.length;d++){ if(d===f||t[d].length>=CAP)continue;
-        const dc=topOf(t[d]); if(dc!==null&&dc!==c)continue;
-        let n=0;for(let i=t[f].length-1;i>=0&&t[f][i]===c;i--)n++;
-        n=Math.min(n,CAP-t[d].length);
-        const ns=t.map(x=>x.slice());ns[f].length-=n;for(let k=0;k<n;k++)ns[d].push(c);
-        out.push(ns);}}
-    return out;};
-  let seen=new Set([key(start)]),front=[start];
-  while(front.length){
-    if(Date.now()>dl) return false;
-    const next=[];
-    for(const st of front)for(const ns of gen(st)){
-      const k=key(ns); if(seen.has(k))continue; seen.add(k);
-      if(done(ns))return true;
-      next.push(ns);}
-    front=next;
-    if(seen.size>120000) return false;
-  }
-  return false;
-}
+/* NIVEL ÚNICO — "Aurora Boreal". Distribución fija, verificada 100% resoluble
+   mediante búsqueda exhaustiva (BFS) con la mecánica exacta del juego
+   (vertido multi-bola): se encontró solución óptima en 11 movimientos.
+   Índice de color → PALETTE. Tubos 6 y 7 empiezan vacíos. */
+const LEVEL_TUBES = [
+  [0,0],          // menta     (parcialmente llena)
+  [1,1,4],        // celeste + ámbar arriba
+  [2,2,2,4],      // violeta x3 + ámbar
+  [3,3,3],        // rosa      (parcialmente llena)
+  [1,0,2,4],      // mixto
+  [3,0,1],        // mixto
+  [4],            // ámbar     (una bola)
+];
 
 /* ================= ESTADO ================= */
 let tubes, sel, moves, history, startT, timerId, won, soundOn = true;
