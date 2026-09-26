@@ -12,17 +12,19 @@
 <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;500;700;900&display=swap" rel="stylesheet">
 <style>
 /* ============================================================
-   AURORA — Ball Sort Zen · single-file, mobile-first
+   AURORA — Ball Sort Zen · un solo archivo, optimizado móvil
+   Sistema de apilado: FLUJO DOM (columna flex, justify-end)
+   + transform para la bola levantada. Cero coordenadas JS.
    ============================================================ */
 *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+
+/* Variables: TODO el tamaño deriva de --ball (bola cuadrada).
+   Un tubo = 4 ranuras exactas + margen interior. */
 :root{
-  /* Geometría del tubo: ANCHO = 4 bolas + 2 márgenes → una bola llena
-     exactamente la ranura (apilamiento compacto, sin huecos centrales
-     y sin sobresalir por el borde superior). */
-  --tube-w: clamp(30px, min(11.5vw, 8.6vh), 52px);
-  --tube-h: calc(var(--tube-w) * 4.5);
-  --ball:   calc((var(--tube-w) - 6px) / 4);
-  --gap:    clamp(8px, 2.6vw, 18px);
+  --ball: clamp(24px, min(11vw, 9vh), 44px);
+  --tube-w: calc(var(--ball) * 4 + 4px);
+  --tube-h: calc(var(--ball) * 4 + 12px);
+  --gap: clamp(8px, 2.6vw, 20px);
   --glass:  rgba(255,255,255,.06);
   --stroke: rgba(255,255,255,.14);
   --text:   #f4efff;
@@ -31,124 +33,117 @@
 }
 html,body{height:100%}
 body{
-  font-family:'Outfit',system-ui,sans-serif;
-  color:var(--text);
-  background:#070417;
-  overflow:hidden;
-  touch-action:manipulation;
-  user-select:none;
-  -webkit-user-select:none;
-  -webkit-touch-callout:none;
+  font-family:'Outfit',system-ui,sans-serif;color:var(--text);
+  background:#070417;overflow:hidden;touch-action:manipulation;
+  user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;
   overscroll-behavior:none;
   padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
 }
 
-/* ---------- cielo de fondo ---------- */
+/* ---------- cielo de fondo (z-index negativo: nunca tapa la UI) ---------- */
 .sky{position:fixed;inset:0;z-index:-3;
-  background:
-    radial-gradient(120% 80% at 50% 115%, #2a1150 0%, transparent 60%),
-    linear-gradient(180deg,#050312 0%,#0b0620 40%,#170a38 100%);
-}
+  background:radial-gradient(120% 80% at 50% 115%,#2a1150 0%,transparent 60%),
+             linear-gradient(180deg,#050312 0%,#0b0620 40%,#170a38 100%)}
 .aurora{position:fixed;inset:-20%;z-index:-2;filter:blur(70px);opacity:.55;pointer-events:none}
 .aurora i{position:absolute;border-radius:50%;mix-blend-mode:screen;animation:drift 16s ease-in-out infinite alternate}
-.aurora i:nth-child(1){width:60vmax;height:26vmax;left:-10%;top:2%;background:linear-gradient(90deg,#00ffb3aa,#00d4ffff00);animation-duration:17s}
+.aurora i:nth-child(1){width:60vmax;height:26vmax;left:-10%;top:2%;background:linear-gradient(90deg,#00ffb3aa,#00d4ff00);animation-duration:17s}
 .aurora i:nth-child(2){width:52vmax;height:22vmax;right:-12%;top:16%;background:linear-gradient(90deg,#a95affcc,#ff5fd2aa);animation-duration:23s;animation-delay:-6s}
 .aurora i:nth-child(3){width:46vmax;height:18vmax;left:8%;top:38%;background:linear-gradient(90deg,#4dc8ff99,#8b5cff55);animation-duration:29s;animation-delay:-12s}
-@keyframes drift{
-  from{transform:translate(-6%,0) rotate(-6deg) scale(1)}
-  to  {transform:translate(8%,6%) rotate(7deg) scale(1.18)}
-}
+@keyframes drift{from{transform:translate(-6%,0) rotate(-6deg) scale(1)}to{transform:translate(8%,6%) rotate(7deg) scale(1.18)}}
 .stars{position:fixed;inset:0;z-index:-1;pointer-events:none;background-repeat:repeat}
 .stars.s1{background-image:
   radial-gradient(1.4px 1.4px at 20px 30px,#fff8,transparent 60%),
   radial-gradient(1px 1px at 160px 90px,#fff5,transparent 60%),
-  radial-gradient(1.6px 1.6px at 250px 200px,#cfeaff7,transparent 60%),
+  radial-gradient(1.6px 1.6px at 250px 200px,#cfeaff77,transparent 60%),
   radial-gradient(1px 1px at 90px 240px,#fff6,transparent 60%);
   background-size:300px 300px;animation:twinkle 5s ease-in-out infinite}
 .stars.s2{background-image:
   radial-gradient(1px 1px at 60px 120px,#fff4,transparent 60%),
-  radial-gradient(1.8px 1.8px at 210px 40px,#ffd9f76,transparent 60%),
+  radial-gradient(1.8px 1.8px at 210px 40px,#ffd9f766,transparent 60%),
   radial-gradient(1px 1px at 300px 280px,#fff5,transparent 60%);
   background-size:340px 340px;animation:twinkle 7s ease-in-out infinite reverse}
 @keyframes twinkle{0%,100%{opacity:.9}50%{opacity:.35}}
 
-/* ---------- layout ---------- */
-.app{height:100dvh;display:flex;flex-direction:column;align-items:center;justify-content:space-between;
-  gap:8px;padding:10px 12px calc(12px + env(safe-area-inset-bottom))}
-header{text-align:center;animation:rise .8s cubic-bezier(.2,.9,.3,1.2) both}
-.logo{font-weight:900;font-size:clamp(26px,7vw,40px);letter-spacing:.32em;margin-right:-.32em;
+/* ---------- layout general: header arriba · tablero centro · botones abajo ---------- */
+.app{position:relative;z-index:1;height:100dvh;display:flex;flex-direction:column;
+     align-items:center;justify-content:space-between;gap:8px;
+     padding:10px 12px calc(12px + env(safe-area-inset-bottom))}
+header{text-align:center;flex:0 0 auto;animation:rise .8s cubic-bezier(.2,.9,.3,1.2) both}
+.logo{font-weight:900;font-size:clamp(24px,6.4vw,38px);letter-spacing:.32em;margin-right:-.32em;
   background:linear-gradient(100deg,#7ef4d4,#8be9ff 30%,#c79bff 60%,#ff9ad5);
   -webkit-background-clip:text;background-clip:text;color:transparent;
   filter:drop-shadow(0 0 18px rgba(139,233,255,.35))}
 .tag{font-weight:300;font-size:clamp(11px,3vw,14px);color:var(--dim);letter-spacing:.14em;margin-top:2px}
 .tag b{color:var(--accent);font-weight:500}
 
-.hud{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;animation:rise .8s .1s cubic-bezier(.2,.9,.3,1.2) both}
+.hud{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;flex:0 0 auto;margin-top:8px;
+     animation:rise .8s .1s cubic-bezier(.2,.9,.3,1.2) both}
 .chip{background:var(--glass);border:1px solid var(--stroke);border-radius:999px;
   padding:6px 14px;font-size:12px;letter-spacing:.08em;color:var(--dim);
   backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px)}
 .chip b{color:var(--text);font-weight:700;font-variant-numeric:tabular-nums}
 
-/* ---------- tablero ---------- */
-.board{display:flex;gap:var(--gap);justify-content:center;align-items:flex-end;flex-wrap:nowrap;
-  width:100%;max-width:640px;padding:14px 6px 26px;overflow:visible;
+/* ---------- tablero: Flexbox, 7 tubos siempre caben sin recorte ---------- */
+.board{flex:1 1 auto;width:100%;display:flex;gap:var(--gap);
+  align-items:center;justify-content:center;flex-wrap:nowrap;   /* una sola fila */
+  max-width:720px;margin:0 auto;padding:14px 4px;min-height:0;
   animation:pop .9s .15s cubic-bezier(.2,1.1,.4,1) both}
 @keyframes rise{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:none}}
 @keyframes pop{from{opacity:0;transform:scale(.86) translateY(24px)}to{opacity:1;transform:none}}
 
+/* ---------- tubo / probeta ---------- */
 .tube{
-  position:relative;width:var(--tube-w);height:var(--tube-h);
+  position:relative;flex:0 0 auto;width:var(--tube-w);height:var(--tube-h);
   border-radius:calc(var(--tube-w)/2);
   background:linear-gradient(180deg,rgba(255,255,255,.02),rgba(255,255,255,.09));
-  border:1.5px solid var(--stroke);
-  border-top-color:rgba(255,255,255,.05);
+  border:1.5px solid var(--stroke);border-top-color:rgba(255,255,255,.05);
   box-shadow:inset 0 0 14px rgba(0,0,0,.45), inset 3px 0 6px rgba(255,255,255,.05), 0 14px 30px rgba(0,0,0,.4);
-  cursor:pointer;transition:transform .25s cubic-bezier(.3,1.4,.5,1), box-shadow .25s, border-color .25s;
-  touch-action:manipulation;
+  cursor:pointer;touch-action:manipulation;
+  transition:transform .25s cubic-bezier(.3,1.4,.5,1), box-shadow .25s, border-color .25s;
+  overflow:hidden;   /* RECORTE: nada sale visualmente de la probeta */
 }
-/* capa interna de bolas: ocupa TODO el alto del tubo, por lo que las
-   ranuras en % son exactas (bola N = 1/4 del hueco, sin espacios) */
-.ball-stack{position:absolute;inset:0;border-radius:inherit;overflow:visible}
 /* brillo de vidrio */
-.tube::before{content:"";position:absolute;top:6%;bottom:12%;left:14%;width:18%;border-radius:99px;
-  background:linear-gradient(180deg,#ffffff26,#ffffff05);pointer-events:none}
-.tube::after{content:"";position:absolute;inset:auto 8% 6% 8%;height:12%;border-radius:50%;
-  background:radial-gradient(ellipse at center,#ffffff14,transparent 70%);pointer-events:none}
-
-.tube.sel{transform:translateY(-10px);border-color:rgba(139,233,255,.65);
-  box-shadow:inset 0 0 14px rgba(0,0,0,.4), 0 0 0 2px rgba(139,233,255,.25), 0 0 34px rgba(139,233,255,.45), 0 20px 34px rgba(0,0,0,.45)}
-.tube.done{border-color:rgba(255,255,255,.3)}
+.tube::before{content:"";position:absolute;top:6%;bottom:12%;left:12%;width:16%;border-radius:99px;
+  background:linear-gradient(180deg,#ffffff26,#ffffff05);pointer-events:none;z-index:3}
 .tube.shake{animation:shake .3s}
 @keyframes shake{25%{transform:translateX(-5px)}75%{transform:translateX(5px)}}
+.tube.sel{border-color:rgba(139,233,255,.65);
+  box-shadow:inset 0 0 14px rgba(0,0,0,.4), 0 0 0 2px rgba(139,233,255,.25), 0 0 34px rgba(139,233,255,.45), 0 14px 30px rgba(0,0,0,.4)}
+
+/* CONTENEDOR DE BOLAS: columna flex con justify-content:flex-end
+   → las bolas se apilan SIEMPRE desde el fondo hacia arriba por flujo DOM.
+   El padding inferior deja a la última bola asentada en la base curva. */
+.ball-stack{position:absolute;inset:0;display:flex;flex-direction:column;
+  justify-content:flex-end;align-items:center;padding:2px 2px 6px}
 
 .ball{
-  position:absolute;left:50%;translate:-50% 0;
-  width:var(--ball);height:var(--ball);border-radius:50%;
+  width:var(--ball);height:var(--ball);border-radius:50%;flex:0 0 auto;
   background:radial-gradient(circle at 32% 28%, #ffffffcc 0%, #ffffff33 18%, transparent 40%),
              radial-gradient(circle at 68% 78%, #00000055 0%, transparent 45%),
              radial-gradient(circle at 45% 40%, var(--c1), var(--c2) 78%);
   box-shadow:0 3px 8px rgba(0,0,0,.4), inset 0 -4px 8px rgba(0,0,0,.25), inset 0 3px 6px rgba(255,255,255,.25);
-  transition:bottom .3s cubic-bezier(.35,1.35,.5,1), translate .25s, scale .25s, filter .25s;
-  pointer-events:none;
+  /* SOLO transform animado: elevación (translateY) y rebote (scale).
+     Nunca se cambian top/left → imposible que "vuele" fuera del tubo. */
+  transition:transform .28s cubic-bezier(.34,1.45,.5,1);
+  will-change:transform;pointer-events:none;
 }
-/* bola levantada: se eleva con `translate` (no toca `bottom`, que sigue
-   anclada a su ranura) → imposible que "vuele" fuera del tubo.
-   Elevación fija en px: nunca supera el borde superior del tubo. */
-.ball.lift{translate:-50% calc(var(--ball) * -0.42);scale:1.06;z-index:5;
-  filter:drop-shadow(0 10px 14px rgba(0,0,0,.5)) brightness(1.12) saturate(1.15)}
-.ball.drop-in{animation:bounce .45s cubic-bezier(.3,1.5,.5,1)}
-@keyframes bounce{0%{scale:1.12 .8}45%{scale:.92 1.1}100%{scale:1 1}}
+/* bola superior levantada (se dibuja encima de sus hermanas) */
+.ball.lift{transform:translateY(calc(var(--ball) * -0.42));z-index:4;
+  filter:brightness(1.12) saturate(1.15) drop-shadow(0 8px 12px rgba(0,0,0,.45))}
+/* rebote al aterrizar */
+.ball.bounce{animation:bounce .4s cubic-bezier(.3,1.5,.5,1)}
+@keyframes bounce{0%{transform:scale(1.14,.84)}45%{transform:scale(.93,1.09)}100%{transform:scale(1,1)}}
 
 .spark{position:absolute;left:50%;top:0;width:5px;height:5px;border-radius:50%;
-  background:#fff;pointer-events:none;animation:fly .9s ease-out forwards}
+  background:#fff;pointer-events:none;z-index:6;animation:fly .9s ease-out forwards}
 @keyframes fly{to{transform:translate(var(--dx),var(--dy)) scale(.2);opacity:0}}
 
 /* ---------- controles ---------- */
-.controls{display:flex;gap:12px;animation:rise .8s .25s cubic-bezier(.2,.9,.3,1.2) both}
+.controls{display:flex;gap:12px;flex:0 0 auto;animation:rise .8s .25s cubic-bezier(.2,.9,.3,1.2) both}
 .btn{appearance:none;border:1px solid var(--stroke);outline:none;cursor:pointer;
   background:var(--glass);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);
   color:var(--text);font-family:inherit;font-weight:500;font-size:14px;letter-spacing:.06em;
-  padding:12px 22px;border-radius:999px;display:flex;align-items:center;gap:8px;
+  padding:12px 20px;border-radius:999px;display:flex;align-items:center;gap:8px;
   transition:transform .15s, background .2s, opacity .2s;min-width:64px;justify-content:center}
 .btn svg{width:17px;height:17px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
 .btn:active{transform:scale(.92)}
@@ -156,7 +151,7 @@ header{text-align:center;animation:rise .8s cubic-bezier(.2,.9,.3,1.2) both}
   box-shadow:0 0 24px rgba(123,92,255,.4)}
 .btn:disabled{opacity:.35;pointer-events:none}
 
-/* ---------- overlay victoria ---------- */
+/* ---------- modal de victoria ---------- */
 .win{position:fixed;inset:0;z-index:50;display:grid;place-items:center;
   background:rgba(5,3,18,.6);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
   opacity:0;pointer-events:none;transition:opacity .5s}
@@ -185,15 +180,17 @@ header{text-align:center;animation:rise .8s cubic-bezier(.2,.9,.3,1.2) both}
 <div class="app">
   <header>
     <div class="logo">AURORA</div>
-    <div class="tag">ordena las esferas · <b id="lvl-name">Nivel 1 — Aurora Boreal</b></div>
+    <div class="tag">ordena las esferas · <b>Nivel 1 — Aurora Boreal</b></div>
+
+    <!-- Panel de estadísticas: sigue siendo parte del bloque superior -->
+    <div class="hud">
+      <span class="chip">MOVIMIENTOS <b id="moves">0</b></span>
+      <span class="chip">MEJOR <b id="best">—</b></span>
+      <span class="chip">TIEMPO <b id="time">0:00</b></span>
+    </div>
   </header>
 
-  <div class="hud">
-    <span class="chip">MOVIMIENTOS <b id="moves">0</b></span>
-    <span class="chip">MEJOR <b id="best">—</b></span>
-    <span class="chip">TIEMPO <b id="time">0:00</b></span>
-  </div>
-
+  <!-- Tablero: ÚNICO contenedor de tubos y bolas -->
   <main class="board" id="board" aria-label="Tablero del juego"></main>
 
   <footer class="controls">
@@ -209,7 +206,7 @@ header{text-align:center;animation:rise .8s cubic-bezier(.2,.9,.3,1.2) both}
 <div class="win" id="win" role="dialog" aria-modal="true">
   <div class="card">
     <span class="medal">🏆</span>
-    <h2>AURORA DESPERTÓ</h2>
+    <h2>¡NIVEL COMPLETADO!</h2>
     <p id="wintext"></p>
     <button class="btn primary" id="again" style="margin:0 auto">
       <svg viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 3v6h-6"/></svg>Jugar de nuevo</button>
@@ -218,38 +215,47 @@ header{text-align:center;animation:rise .8s cubic-bezier(.2,.9,.3,1.2) both}
 
 <script>
 "use strict";
-/* ================= CONFIG — un solo nivel ================= */
-const CAP = 4;                       // bolas por tubo (máximo)
-const PALETTE = [                    // degradados radiales por color
-  ["#5ee6a8","#0f9d6e"],            // menta
-  ["#7ec8ff","#2563eb"],            // celeste
-  ["#c99bff","#7c3aed"],            // violeta
-  ["#ffa8d5","#e0447f"],            // rosa
-  ["#ffd97a","#e09a1f"],            // ámbar
+/* ============================================================
+   AURORA · Ball Sort Zen — lógica del juego (vanilla JS)
+   Convenciones:
+   · tubes[i] = array de índices de color; índice 0 = FONDO del
+     tubo, último elemento = bola SUPERIOR (más arriba).
+   · Máximo CAP = 4 bolas por tubo.
+   · Render por FLUJO DOM (.ball-stack flex column + flex-end):
+     las bolas se apilan solas de abajo hacia arriba. La única
+     animación usa `transform` (nunca top/left ni coords JS).
+   ============================================================ */
+
+/* ---------- CONFIG: paleta y ÚNICO nivel ---------- */
+const CAP = 4;
+const PALETTE = [                       // [brillo, cuerpo] por color
+  ["#5ee6a8","#0f9d6e"],                // 0 menta
+  ["#7ec8ff","#2563eb"],                // 1 celeste
+  ["#c99bff","#7c3aed"],                // 2 violeta
+  ["#ffa8d5","#e0447f"],                // 3 rosa
+  ["#ffd97a","#e09a1f"],                // 4 ámbar
 ];
-/* NIVEL ÚNICO — "Aurora Boreal". Distribución FIJA y verificada:
-   5 colores × CAP(4) bolas = 20; 5 tubos llenos + 2 vacíos = 7 tubos.
-   Rotación cíclica [c0..c4] desplazada → resolvable encadenando
-   volcados de tubo completo en pocos movimientos. Resolubilidad
-   confirmada por BFS exhaustivo sobre las reglas EXACTAS del motor y
-   replay tap-a-tap hasta la victoria con `tapTube` real (test_game.js).
-   Índice de color → PALETTE. Tubos 5 y 6 empiezan vacíos. */
+/* NIVEL 1 — "Aurora Boreal": 7 tubos, 5 colores × 4 bolas = 20 bolas.
+   Tubos 0–4 llenos, 5 y 6 vacíos. Distribución FIJA (sin azar):
+   cada tubo tiene una bola de cada color excepto uno, más la extra.
+   Resolubilidad verificada por BFS exhaustivo con las reglas EXACTAS
+   del motor y replay tap-a-tap hasta la victoria (test_game.js). */
 const LEVEL_TUBES = [
-  [0,1,2,3],   // abajo menta · arriba rosa
-  [1,2,3,4],   // abajo celeste · arriba ámbar
-  [2,3,4,0],   // abajo violeta · arriba menta
-  [3,4,0,1],   // abajo rosa · arriba celeste
-  [4,0,1,2],   // abajo ámbar · arriba violeta
+  [0,1,2,3],   // fondo menta → arriba rosa
+  [1,2,3,4],   // fondo celeste → arriba ámbar
+  [2,3,4,0],   // fondo violeta → arriba menta
+  [3,4,0,1],   // fondo rosa → arriba celeste
+  [4,0,1,2],   // fondo ámbar → arriba violeta
   [],          // vacío
   [],          // vacío
 ];
 
-/* ================= ESTADO ================= */
+/* ---------- ESTADO ---------- */
 let tubes, sel, moves, history, startT, timerId, won, soundOn = true;
 const $ = id => document.getElementById(id);
 const boardEl = $("board");
 
-/* ================= AUDIO procedural (sin assets) ================= */
+/* ---------- AUDIO procedural (sin assets externos) ---------- */
 let AC = null;
 function ac(){ if(!AC) AC = new (window.AudioContext||window.webkitAudioContext)(); return AC; }
 function tone(f, dur=.12, type="sine", vol=.18, when=0){
@@ -265,57 +271,53 @@ function tone(f, dur=.12, type="sine", vol=.18, when=0){
   }catch(e){}
 }
 const sfx = {
-  pick:  ()=> tone(620,.09,"triangle",.14),
-  drop:  ()=> { tone(340,.1,"sine",.16); tone(510,.08,"sine",.08,.02); },
-  block: ()=> tone(150,.16,"sawtooth",.08),
-  done:  ()=> { [523,659,784].forEach((f,i)=>tone(f,.2,"triangle",.14,i*.07)); },
-  win:   ()=> { [523,659,784,1046,1318].forEach((f,i)=>tone(f,.5,"triangle",.15,i*.12)); },
+  pick : () => tone(620,.09,"triangle",.14),
+  drop : () => { tone(340,.1,"sine",.16); tone(510,.08,"sine",.08,.02); },
+  block: () => tone(150,.16,"sawtooth",.08),
+  done : () => [523,659,784].forEach((f,i)=>tone(f,.2,"triangle",.14,i*.07)),
+  win  : () => [523,659,784,1046,1318].forEach((f,i)=>tone(f,.5,"triangle",.15,i*.12)),
 };
 
-/* ================= LÓGICA ================= */
-/* Convención de invariantes: un tubo es SIEMPRE un array compacto sin
-   `null` internos ni trailing. `topOf` devuelve el índice de la última
-   bola real (o -1). `fillHoles` es una red de seguridad defensiva por
-   si algún estado corrupto llegara desde localStorage/pruebas. */
-const topOf = t => { for(let i=t.length-1;i>=0;i--) if(t[i]!==null && t[i]!==undefined) return i; return -1; };
-function fillHoles(t){ const out=[]; for(const b of t) if(b!==null && b!==undefined) out.push(b); return out; }
-function clone(a){ return a.map(fillHoles); }
+/* ---------- REGLAS ---------- */
+/* Índice de la bola superior (último elemento); -1 si el tubo está vacío */
+const topOf = t => t.length ? t.length-1 : -1;
+const clone = a => a.map(t => t.slice());
 
+/* Movimiento válido ⇔ origen no vacío ∧ destino no lleno ∧
+   (destino vacío ∨ color superior coincidente) */
 function canPour(from,to){
   if(from === to) return false;
   const src = tubes[from], dst = tubes[to];
-  if(dst.length >= CAP) return false;
-  const ti = topOf(src);
-  if(ti === -1) return false;
-  const si = topOf(dst);
-  if(si === -1) return true;
-  return src[ti] === dst[si];
+  if(!src.length || dst.length >= CAP) return false;
+  return !dst.length || src[src.length-1] === dst[dst.length-1];
 }
+/* Nº de bolas a verter = racha superior del origen, limitada al hueco del destino */
+function pourCount(from,to){
+  const src = tubes[from], dst = tubes[to];
+  const col = src[src.length-1];
+  let run = 0;
+  for(let i = src.length-1; i>=0 && src[i]===col; i--) run++;
+  return Math.min(run, CAP - dst.length);
+}
+/* Victoria ⇔ todo tubo vacío o lleno con 4 esferas del mismo color */
 function isSolved(){
   return tubes.every(t => t.length===0 || (t.length===CAP && t.every(b=>b===t[0])));
 }
-/* Nº de bolas a verter = longitud de la RACHA superior del origen,
-   limitada por el espacio libre del destino. */
-function pourCount(from,to){
-  const src = tubes[from], dst = tubes[to];
-  const ti = topOf(src);
-  if(ti === -1) return 0;
-  const col = src[ti];
-  let run = 0;
-  for(let i=ti; i>=0 && src[i]===col; i--) run++;
-  return Math.max(0, Math.min(run, CAP - dst.length));
-}
 
+/* ---------- MOVIMIENTO + HISTORIAL (pila para Deshacer) ---------- */
 function doMove(from,to){
-  history.push({tubes:clone(tubes), moves});
-  const col = tubes[from][topOf(tubes[from])];
-  const k = pourCount(from,to);          // calcular ANTES de mutar
-  for(let i=0;i<k;i++){
-    tubes[from].pop(); tubes[to].push(col);
+  history.push({ tubes: clone(tubes), moves });
+  const col = tubes[from][tubes[from].length-1];
+  const k = pourCount(from,to);              // calcular ANTES de mutar
+  tubes[from].length -= k;                   // origen pierde la racha
+  for(let i=0;i<k;i++) tubes[to].push(col);  // destino la recibe
+  moves++;                                   // solo cuenta movimientos válidos
+  if(!startT){                               // el cronómetro arranca en el 1er movimiento
+    startT = Date.now();
+    timerId = setInterval(()=>{ $("time").textContent = fmt(Date.now()-startT); }, 500);
   }
-  moves++;
   sfx.drop();
-  render();
+  render(to);                                // render con rebote en el destino
   checkTubeDone(to);
   updateHud();
   if(isSolved()) victory();
@@ -324,27 +326,27 @@ function undo(){
   if(!history.length || won) return;
   const st = history.pop();
   tubes = st.tubes; moves = st.moves; sel = null;
-  sfx.pick();
-  render();
-  updateHud();
+  sfx.pick(); render(); updateHud();
 }
 
+/* ---------- INTERACCIÓN (tap seleccionar → tap verter) ---------- */
 function tapTube(idx){
   if(won) return;
-  ensureTimer();
   if(sel === null){
-    if(topOf(tubes[idx]) === -1){ bump(idx); return; }
+    // seleccionar SOLO la bola superior del tubo tocado
+    if(!tubes[idx].length){ bump(idx); return; }   // vacío: nada que levantar
     sel = idx; sfx.pick(); render();
     return;
   }
-  if(sel === idx){ sel = null; render(); return; }
+  if(sel === idx){ sel = null; render(); return; } // segundo tap: deselecciona
   if(canPour(sel, idx)){
     const from = sel; sel = null;
     doMove(from, idx);
   }else{
-    bump(idx); sfx.block();
-    if(topOf(tubes[idx]) !== -1){ sel = idx; sfx.pick(); render(); }
-    else { sel = null; render(); }
+    bump(idx); sfx.block();                        // inválido: aviso + re-selección
+    if(tubes[idx].length){ sel = idx; sfx.pick(); }
+    else sel = null;
+    render();
   }
 }
 function bump(idx){
@@ -352,46 +354,44 @@ function bump(idx){
   if(el){ el.classList.remove("shake"); void el.offsetWidth; el.classList.add("shake"); }
 }
 
-/* ================= RENDER ================= */
-/* Las bolas se colocan SIEMPRE de abajo hacia arriba, apiladas y
-   tocándose: cada bola ocupa exactamente una ranura de 100/CAP % del
-   alto interior del tubo (bottom = slot·25%). Nada puede quedar
-   "esparcido": las bolas solo existen dentro de .ball-stack del tubo. */
-const BALL_SLOT = 100 / CAP;                       // % de altura por ranura
-function ballHTML(colorIdx, slot, lift){
-  const [c1,c2] = PALETTE[colorIdx];
-  return `<span class="ball${lift?" lift":""}" data-slot="${slot}"`
-       + ` style="--c1:${c1};--c2:${c2};bottom:${slot*BALL_SLOT}%"></span>`;
-}
-function render(liftFrom){
+/* ---------- RENDER (flujo DOM: las bolas se apilan solas) ---------- */
+let lastDest = -1;
+function render(destIdx){
+  if(destIdx !== undefined) lastDest = destIdx;
   boardEl.innerHTML = "";
   tubes.forEach((t,i)=>{
-    const d = document.createElement("div");
-    d.className = "tube" + (sel===i?" sel":"") +
-      (t.length===CAP && t.every(b=>b===t[0]) ? " done":"");
-    d.setAttribute("role","button");
-    d.setAttribute("aria-label", `Tubo ${i+1}`);
-    /* pila interna: contenedor exclusivo de bolas del tubo */
+    const tube = document.createElement("div");
+    tube.className = "tube" + (sel===i ? " sel" : "") +
+      (t.length===CAP && t.every(b=>b===t[0]) ? " done" : "");
+    tube.setAttribute("role","button");
+    tube.setAttribute("aria-label", `Tubo ${i+1}`);
+
+    // Contenedor exclusivo de bolas: flex-column + flex-end →
+    // fondo del tubo = primera bola del array, arriba = última.
     const stack = document.createElement("div");
     stack.className = "ball-stack";
-    const lifted = (sel===i) ? topOf(t) : -1;
-    for(let slot=0; slot<t.length; slot++){
-      const b = t[slot];
-      if(b!==null && b!==undefined) stack.insertAdjacentHTML("beforeend", ballHTML(b,slot,slot===lifted));
-    }
-    d.appendChild(stack);
-    d.addEventListener("click", ()=>tapTube(i));
-    boardEl.appendChild(d);
+    t.forEach((colorIdx, slot)=>{
+      const b = document.createElement("span");
+      const [c1,c2] = PALETTE[colorIdx];
+      b.className = "ball"
+        + (slot===t.length-1 && sel===i ? " lift" : "")        // superior levantada
+        + (i===lastDest && slot>=t.length-2 ? " bounce" : ""); // rebote al aterrizar
+      b.style.setProperty("--c1", c1);
+      b.style.setProperty("--c2", c2);
+      stack.appendChild(b);                                     // ¡orden DOM = orden físico!
+    });
+    tube.appendChild(stack);
+    tube.addEventListener("click", ()=>tapTube(i));
+    boardEl.appendChild(tube);
   });
+  if(lastDest >= 0) setTimeout(()=>{ lastDest = -1; }, 450);   // un solo rebote por jugada
   $("undo").disabled = !history.length || won;
 }
 function checkTubeDone(idx){
   const t = tubes[idx];
-  if(t.length===CAP && t.every(b=>b===t[0])){
-    sfx.done();
-    burst(boardEl.children[idx]);
-  }
+  if(t.length===CAP && t.every(b=>b===t[0])){ sfx.done(); burst(boardEl.children[idx]); }
 }
+/* chispas de celebración al completar un tubo */
 function burst(el){
   if(!el) return;
   const colors = ["#5ee6a8","#7ec8ff","#c99bff","#ffa8d5","#ffd97a"];
@@ -407,20 +407,15 @@ function burst(el){
   }
 }
 
-/* ================= HUD / TIEMPO ================= */
+/* ---------- HUD / TIEMPO ---------- */
 function fmt(ms){ const s=Math.floor(ms/1000); return `${Math.floor(s/60)}:${String(s%60).padStart(2,"0")}`; }
-function ensureTimer(){
-  if(timerId || won || startT) return;
-  startT = Date.now();
-  timerId = setInterval(()=>{ $("time").textContent = fmt(Date.now()-startT); }, 500);
-}
 function updateHud(){
   $("moves").textContent = moves;
   const best = localStorage.getItem("aurora_best");
   $("best").textContent = best ? best : "—";
 }
 
-/* ================= VICTORIA ================= */
+/* ---------- VICTORIA ---------- */
 function victory(){
   won = true; clearInterval(timerId);
   const secs = startT ? Math.floor((Date.now()-startT)/1000) : 0;
@@ -451,10 +446,10 @@ function starRain(){
   }
 }
 
-/* ================= INIT ================= */
+/* ---------- INIT / BOTONES ---------- */
 function newGame(){
   tubes = clone(LEVEL_TUBES);
-  sel = null; moves = 0; history = []; won = false;
+  sel = null; moves = 0; history = []; won = false; lastDest = -1;
   startT = 0; clearInterval(timerId);
   $("time").textContent = "0:00";
   $("win").classList.remove("show");
@@ -470,16 +465,17 @@ $("sound").addEventListener("click", e=>{
   b.lastChild.textContent = soundOn ? "Sonido" : "Silencio";
   if(soundOn) sfx.pick();
 });
-document.addEventListener("pointerdown", ()=>{ if(AC && AC.state==="suspended") AC.resume(); }, {once:false});
+document.addEventListener("pointerdown", ()=>{ if(AC && AC.state==="suspended") AC.resume(); });
 newGame();
 
-/* ---- export para pruebas automatizadas (nodo) ---- */
+/* ---- export para pruebas automatizadas (node) ---- */
 if(typeof module==="object" && module && typeof module.exports==="object"){
   module.exports = {
     CAP, LEVEL_TUBES, PALETTE,
-    _setState(t){ tubes = clone(t); sel=null; moves=0; history=[]; won=false; startT=1; clearInterval(timerId); timerId=null; },
+    _setState(t){ tubes = clone(t); sel=null; moves=0; history=[]; won=false;
+                  startT=0; clearInterval(timerId); timerId=null; lastDest=-1; },
     tapTube, canPour, pourCount, isSolved, undo, topOf,
-    _get(){ return {tubes:clone(tubes), sel, moves, won}; }
+    _get(){ return { tubes: clone(tubes), sel, moves, won }; }
   };
 }
 </script>
