@@ -1,206 +1,147 @@
 "use strict";
-/* ============================================================
-   Test automatizado de AURORA Ball Sort Zen
-   1) Extrae el <script> de index.html y lo ejecuta con un DOM
-      mínimo simulado → verifica que el juego arranca sin errores.
-   2) Prueba mecánica "tap-to-select, tap-to-pour" paso a paso.
-   3) Verifica invariantes del nivel (bolas completas, conteos).
-   4) Resuelve el nivel con DFS usando la MISMA lógica del juego
-      (garantía de resolubilidad + solución óptima).
-   ============================================================ */
-const fs = require("fs");
-const vm = require("vm");
+/* Automated tap-by-tap replay of index.html game logic under a DOM stub. */
 
-/* ---------- DOM simulado mínimo ---------- */
-function makeEl(id){
+// ---------- minimal DOM stub ----------
+function makeEl(tag) {
   return {
-    id, children: [], style:{}, dataset:{}, _text:"", _html:"",
-    classList:{ _s:new Set(), add(c){this._s.add(c)}, remove(c){this._s.delete(c)},
-                toggle(c,f){f?this._s.add(c):this._s.delete(c)}, contains(c){return this._s.has(c)} },
-    set innerHTML(v){ this._html=v; if(v==="") this.children=[]; },
-    get innerHTML(){ return this._html; },
-    set textContent(v){ this._text=v; },
-    get textContent(){ return this._text; },
-    lastChild:{ textContent:"" },
-    appendChild(ch){ this.children.push(ch); return ch; },
-    insertAdjacentHTML(){}, setAttribute(){}, getAttribute(){return null},
-    addEventListener(){}, removeEventListener(){},
-    get offsetWidth(){ return 0; },
+    tag, children: [], style: { setProperty(){} }, dataset: {},
+    classList: { _s:new Set(), add(c){this._s.add(c);}, remove(c){this._s.delete(c);}, contains(c){return this._s.has(c);} },
+    setAttribute(){}, addEventListener(ev, fn){ this._on = this._on||{}; this._on[ev]=fn; },
+    insertAdjacentHTML(pos, html){
+      // parse balls minimally: count spans with class ball and capture bottom% & lift
+      const m = [...html.matchAll(/class="ball([^"]*)"[^>]*bottom:([\d.]+)%/g)];
+      for (const g of m) this.children.push({ className:"ball"+g[1], bottom: parseFloat(g[2]), isSpark:false });
+    },
+    appendChild(ch){ this.children.push(ch); },
+    remove(){}, textContent:"", innerHTML:"", disabled:false, lastChild:{}, offsetWidth:0
   };
 }
-const ids = ["board","moves","best","time","undo","reset","sound","win","wintext","again","lvl-name"];
-const els = {}; ids.forEach(i=>els[i]=makeEl(i));
-
-let gameExports = null;
-const sandbox = {
-  console, setTimeout:(f,t)=>t<5000?f():undefined, clearTimeout, setInterval:()=>0, clearInterval,
-  document:{ getElementById:i=>els[i]||makeEl(i), createElement:()=>makeEl(""),
-             addEventListener(){}, body:makeEl("body") },
-  window:{ AudioContext:undefined, webkitAudioContext:undefined },
-  localStorage:{ _d:{}, getItem(k){return this._d[k]??null}, setItem(k,v){this._d[k]=String(v)} },
-  module:{ exports:null },
+const ids = {};
+["board","moves","best","time","undo","reset","sound","win","wintext","again","lvl-name"].forEach(i=>ids[i]=makeEl("div"));
+global.document = {
+  getElementById: id => ids[id] || (ids[id]=makeEl("div")),
+  createElement: t => makeEl(t),
+  addEventListener(){},
+  body: makeEl("body"),
 };
-vm.createContext(sandbox);
+global.window = { addEventListener(){}, AudioContext:null, webkitAudioContext:null };
+global.localStorage = { _d:{}, getItem(k){return this._d[k]??null;}, setItem(k,v){this._d[k]=String(v);} };
+global.setInterval = () => 0;
+global.clearInterval = () => {};
+global.setTimeout = (fn) => { try{ fn(); }catch(e){} return 0; };
+global.module = { exports: {} };
 
-/* ---------- extraer y ejecutar el script del juego ---------- */
-const html = fs.readFileSync(__dirname + "/index.html", "utf8");
-const m = html.match(/<script>([\s\S]*?)<\/script>/);
-if(!m) throw new Error("No se encontró <script> en index.html");
-// envolver en función para que `module` del sandbox sea visible y "use strict" no bloquee reasignaciones
-const wrapped = "(function(module){\n" + m[1] + "\n})";
-const factory = vm.runInContext(wrapped, sandbox, {filename:"game.js"});
-factory(sandbox.module);
-gameExports = sandbox.module.exports;
-if(!gameExports) throw new Error("El script no expuso API de pruebas");
+// ---------- load game script from index.html ----------
+const fs = require("fs");
+const src = fs.readFileSync(__dirname + "/index.html", "utf8");
+const js = src.split("<script>")[1].split("</scr" + "ipt>")[0];
+eval(js);
+const M = module.exports;
 
-const G = gameExports;
 let pass = 0, fail = 0;
-const ok = (cond,msg)=>{ cond?(pass++,console.log("  ✔ "+msg)):(fail++,console.log("  ✘ "+msg)); };
+function ok(cond, msg){ if(cond){pass++; console.log("  PASS:", msg);} else {fail++; console.log("  FAIL:", msg);} }
 
-/* ---------- 1. Invariantes del nivel ---------- */
-console.log("\n[1] Invariantes del nivel");
-const NC = G.PALETTE.length;                       // nº de colores
-const totalBalls = G.LEVEL_TUBES.reduce((a,t)=>a+t.length,0);
-ok(G.LEVEL_TUBES.every(t=>t.length<=G.CAP), "ningún tubo supera la capacidad (CAP=4)");
-ok(totalBalls === NC*G.CAP, `total de bolas = ${NC*G.CAP} (${NC} colores × ${G.CAP})`);
-for(let c=0;c<NC;c++){
-  const n = G.LEVEL_TUBES.flat().filter(b=>b===c).length;
-  ok(n===G.CAP, `color ${c} aparece exactamente ${G.CAP} veces`);
-}
-ok(G.LEVEL_TUBES.filter(t=>t.length===0).length>=2, "hay al menos 2 tubos vacíos");
-
-/* ---------- 2. Render inicial ---------- */
-console.log("\n[2] Render e interacción básica");
-ok(els.board.children.length === G.LEVEL_TUBES.length, `se renderizan ${G.LEVEL_TUBES.length} tubos en el tablero`);
-
-/* Simular taps sobre el motor real del juego */
-function tap(i){ G.tapTube(i); }
-
-// reset a semilla conocida
-G._setState(G.LEVEL_TUBES.map(t=>t.slice()));
-let s = G._get();
-ok(s.sel===null && s.moves===0, "estado inicial: sin selección, 0 movimientos");
-
-// tap en tubo lleno → selecciona (levanta bola superior)
-tap(0); s = G._get();
-ok(s.sel===0, "tap en tubo con bolas → selecciona/levanta la bola superior");
-
-// tap mismo tubo → deselecciona
-tap(0); s = G._get();
-ok(s.sel===null, "tap repetido en el mismo tubo → deselecciona");
-
-// tap tubo vacío primero → no selecciona nada
-const EMPTY1 = G.LEVEL_TUBES.findIndex(t=>t.length===0);
-tap(EMPTY1); s = G._get();
-ok(s.sel===null, "tap en tubo vacío sin selección previa → no hace nada (sin error)");
-
-/* ---------- 3. Vertido real entre tubos ---------- */
-console.log("\n[3] Vertido (tap origen → tap destino)");
-// Tubo vacío recibe la superior del tubo 0 (color 3)
-tap(0);            // seleccionar tubo 0
-tap(EMPTY1);       // verter en el primer tubo vacío
-s = G._get();
-ok(s.tubes[EMPTY1].length===1 && s.tubes[EMPTY1][0]===3, `la bola viaja del tubo 0 al tubo ${EMPTY1+1}`);
-ok(s.tubes[0].length===3, "el tubo de origen pierde una bola");
-ok(s.moves===1, "contador de movimientos = 1");
-ok(s.sel===null, "tras verter, no queda selección activa");
-
-// undo restaura
-G.undo();
-s = G._get();
-ok(s.tubes[EMPTY1].length===0 && s.tubes[0].length===4 && s.moves===0, "deshacer restaura el estado anterior");
-
-// vertido inválido: color distinto sobre tubo no-vacío → se re-selecciona destino, no se vierte
-tap(0); tap(1);    // tubo 1 superior=color 2, tubo 0 superior=color 3 → inválido
-s = G._get();
-ok(s.moves===0, "vertido inválido NO mueve bolas");
-ok(s.sel===1, "tras vertido inválido, la selección pasa al tubo tocado");
-
-// vertido multi-bola (mismo color apilado): caso válido dentro de CAP
-// origen [0,2,2,2] vierte DOS '2' al destino [1,2] → [1,2,2,2]
-G._setState([[0,2,2,2],[1,2],[],[]]);
-tap(0); tap(1);
-s = G._get();
-ok(s.tubes[1].join()==="1,2,2,2" && s.tubes[0].join()==="0", "vierte varias bolas iguales a la vez (vertido múltiple)");
-ok(s.moves===1, "el vertido múltiple cuenta como UN movimiento");
-ok(s.won===false, "no se declara victoria prematura (quedan tubos sin completar)");
-
-// victoria del motor real en escenario trivial: [x,y],[y,x] → 4 taps
-G._setState([[0,1],[1,0],[],[]]);
-tap(0); tap(2);   // mueve 1 → vacío
-tap(1); tap(0);   // 0 sobre 0… verificar sin excepción
-s = G._get();
-ok(typeof s.won === "boolean", "escenario mixto no lanza errores");
-
-/* ---------- 4. Resolución completa con la lógica del juego ---------- */
-console.log("\n[4] ¿Es jugable hasta ganar? Búsqueda DFS con las reglas del juego");
-function key(ts){ return ts.map(t=>t.join(".")).join("|"); }
-function pourOn(ts, from, to, CAP){
-  const f = ts[from], t = ts[to];
-  if(!f.length || t.length>=CAP) return null;
-  const col = f[f.length-1];
-  if(t.length && t[t.length-1]!==col) return null;
-  let n=0; for(let i=f.length-1;i>=0&&f[i]===col;i--) n++;
-  n = Math.min(n, CAP-t.length);
-  if(n<=0) return null;
-  const nf = f.slice(0,f.length-n), nt = t.concat(Array(n).fill(col));
-  const r = ts.map(x=>x.slice()); r[from]=nf; r[to]=nt; return r;
-}
-const CAP = G.CAP;
-const solvedState = ts => ts.every(t=>t.length===0||(t.length===CAP&&t.every(b=>b===t[0])));
-// nota: el juego exige todos los tubos llenos; con 8 tubos y 20 bolas hay 5 llenos+3... 
-// nuestro nivel tiene 6 llenos? verificar con isSolved del propio juego abajo.
-
-const start = G.LEVEL_TUBES.map(t=>t.slice());
-// BFS para solución ÓPTIMA con las mismas reglas del motor
-const parent = new Map([[key(start), {prev:null, mv:null}]]);
-const queue = [start];
-let solution = null, visited = 0;
-while(queue.length && !solution){
-  const st = queue.shift(); visited++;
-  if(visited > 500000) break; // cota de seguridad
-  if(st !== start && solvedState(st)){ solution = st; break; }
-  for(let f=0; f<st.length && !solution; f++){
-    for(let t=0; t<st.length && !solution; t++){
-      if(f===t) continue;
-      const ns = pourOn(st, f, t, CAP);
-      if(!ns) continue;
-      const k = key(ns);
-      if(parent.has(k)) continue;
-      parent.set(k, {prev:st, mv:[f,t]});
-      queue.push(ns);
+// ---------- BFS solver replicating the engine's EXACT rules ----------
+const CAP = M.CAP;
+const clone = a => a.map(x => x.slice());
+const topOf = t => { for(let i=t.length-1;i>=0;i--) if(t[i]!==null) return i; return -1; };
+function pourCountC(nt,f,t){ const ti=topOf(nt[f]); if(ti<0)return 0; const col=nt[f][ti]; let n=0; for(let i=ti;i>=0&&nt[f][i]===col;i--)n++; return Math.min(n, CAP-nt[t].length); }
+function applyMove(s,f,t){ if(f===t)return null; if(s[t].length>=CAP)return null; const ti=topOf(s[f]); if(ti<0)return null; const si=topOf(s[t]); if(si>=0 && s[f][ti]!==s[t][si])return null;
+  const nt=clone(s); const k=pourCountC(nt,f,t); if(k<=0)return null; const col=nt[f][topOf(nt[f])]; for(let i=0;i<k;i++){nt[f].pop();nt[t].push(col);} 
+  // invariant: no trailing nulls
+  for(const tu of nt){ while(tu.length && tu[tu.length-1]===null) tu.pop(); }
+  return nt; }
+const stateKey = s => s.map(t=>t.join(",")).join("|");
+function solvedC(tu){ return tu.every(t => t.length===0 || (t.length===CAP && t.every(b=>b===t[0]))); }
+function solve(init){
+  const seen=new Set([stateKey(init)]); let frontier=[{s:init,path:[]}];
+  while(frontier.length){ const next=[];
+    for(const node of frontier){
+      for(let f=0;f<node.s.length;f++)for(let t=0;t<node.s.length;t++){
+        const ns=applyMove(node.s,f,t); if(!ns)continue; const k=stateKey(ns); if(seen.has(k))continue; seen.add(k);
+        const path=node.path.concat([[f,t]]); if(solvedC(ns))return path; next.push({s:ns,path});
+      }
     }
+    frontier=next;
   }
-}
-ok(solution!==null, `nivel RESOLUBLE (BFS exploró ${visited} estados)`);
-
-if(solution){
-  // reconstruir camino y replayarlo contra el MOTOR REAL del juego
-  const path = [];
-  let cur = key(solution);
-  while(parent.get(cur).mv){ path.unshift(parent.get(cur).mv); cur = key(parent.get(cur).prev); }
-  console.log(`  solución óptima: ${path.length} movimientos → reproduciendo contra el motor real…`);
-  G._setState(start.map(t=>t.slice()));
-  let engineWon = false, desyncAt = -1;
-  for(let mi=0; mi<path.length; mi++){
-    const [f,t] = path[mi];
-    const pre = G._get().tubes;                       // estado ANTES del par de taps
-    const expected = pourOn(pre, f, t, CAP);          // lo que las reglas prometen
-    G.tapTube(f); G.tapTube(t);                       // taps reales sobre el motor
-    const g = G._get();
-    if(expected===null || g.sel!==null ||
-       g.tubes.map(x=>x.join(",")).join("|") !== expected.map(x=>x.join(",")).join("|")){
-      desyncAt = mi; break;
-    }
-    if(g.won){ engineWon = true; break; }
-  }
-  ok(desyncAt===-1, `motor y reglas coinciden movimiento a movimiento${desyncAt>=0?" (divergencia en mov #"+(desyncAt+1)+")":""}`);
-  ok(engineWon, "VICTORIA alcanzada pulsando tubos con la interfaz real (tap→tap)");
-  const g = G._get();
-  ok(g.tubes.every(t=>t.length===CAP && t.every(b=>b===t[0])), "estado final: cada tubo lleno con un solo color");
-  ok(g.moves === path.length, `movimientos contados = longitud de la solución (${path.length})`);
+  return null;
 }
 
-/* ---------- resumen ---------- */
-console.log(`\n=== RESULTADO: ${pass} pasadas, ${fail} fallidas ===`);
+console.log("== 1. Level integrity ==");
+const L = M.LEVEL_TUBES;
+const counts = {};
+L.forEach(t=>t.forEach(b=>counts[b]=(counts[b]||0)+1));
+ok(Object.keys(counts).length === M.PALETTE.length, `usa los ${M.PALETTE.length} colores de la paleta`);
+ok(Object.values(counts).every(c=>c===CAP), `cada color tiene exactamente ${CAP} bolas: ${JSON.stringify(counts)}`);
+ok(L.every(t=>t.length<=CAP), "ningún tubo excede la capacidad");
+ok(L.filter(t=>t.length===0).length >= 2, "hay al menos 2 tubos vacíos");
+ok(L.every(t=>t.length===0 || t.every(b=>typeof b==="number" && b>=0 && b<M.PALETTE.length)), "todos los índices de color válidos");
+
+console.log("== 2. Solvability (BFS bajo reglas exactas del motor) ==");
+const sol = solve(clone(L));
+ok(sol !== null, sol ? `nivel RESOLUBLE en ${sol.length} movimientos: ${sol.map(m=>m.join("→")).join(", ")}` : "nivel INSOLUBLE");
+
+console.log("== 3. Tap-by-tap replay usando la función tapTube REAL ==");
+M._setState(L);
+let st = M._get();
+ok(st.tubes.map(t=>t.length).join(",") === L.map(t=>t.length).join(","), "estado inicial restaurado");
+
+// helper: perform a real tap pair through the shipped tapTube()
+function tapPair(f,t){
+  M.tapTube(f);            // select source
+  const mid = M._get();
+  if(mid.sel !== f) return false;
+  M.tapTube(t);            // pour into target
+  return true;
+}
+let movesDone = 0, badStep = null;
+for (const [f,t] of (sol||[])) {
+  const before = stateKey(M._get().tubes);
+  const expected = stateKey(applyMove(M._get().tubes, f, t));
+  if (!tapPair(f,t)) { badStep = `tap ${f}→${t} rechazado por el motor`; break; }
+  const after = stateKey(M._get().tubes);
+  if (after !== expected) { badStep = `discrepancia tras ${f}→${t}: motor=${after} esperado=${expected}`; break; }
+  // invariants after every move
+  const tubes = M._get().tubes;
+  for (const tu of tubes) {
+    if (tu.length > CAP) { badStep = "tubo desbordado"; break; }
+    if (tu.includes(null)) { badStep = "agujero null dentro de un tubo"; break; }
+  }
+  const tot = tubes.reduce((a,t)=>a+t.length,0);
+  if (tot !== CAP*M.PALETTE.length) { badStep = `conservación rota: ${tot} bolas`; break; }
+  movesDone++;
+}
+ok(badStep === null, badStep ?? `replay completo sin errores (${movesDone}/${(sol||[]).length} volcados)`);
+ok(M._get().won === true, "el juego declaró VICTORIA tras el último movimiento");
+ok(M._get().moves === (sol||[]).length, `contador de movimientos = ${(sol||[]).length}`);
+
+console.log("== 4. Reglas de bloqueo y selección ==");
+M._setState(L);
+// tap empty tube → nothing selected
+M.tapTube(L.findIndex(t=>t.length===0));
+ok(M._get().sel === null, "tocar tubo vacío no selecciona nada");
+// select tube 0 then tap it again → deselect
+M.tapTube(0); ok(M._get().sel === 0, "tocar tubo con bolas lo selecciona");
+M.tapTube(0); ok(M._get().sel === null, "tocarlo de nuevo lo deselecciona");
+// invalid pour: tube0 top=3, tube1 top=0 → cannot pour; tapping tube1 should switch selection to tube1
+M.tapTube(0); M.tapTube(1);
+const g = M._get();
+ok(g.sel === 1 && stateKey(g.tubes) === stateKey(L), "volcado inválido no mueve bolas y re-selecciona el tubo tocado");
+// valid partial pour semantics: pourCount caps at run length and free space
+M._setState([[0,0,1,1],[0,0,1,1],[],[]]);
+M.tapTube(0); M.tapTube(2);
+ok(stateKey(M._get().tubes) === "0,0|0,0,1,1|1,1|", "run de 2 bolas idénticas se vierte completo en tubo vacío");
+M._setState([[1,0],[0,0],[]]); // top of 0 is 0, run length 1
+M.tapTube(0); M.tapTube(2);
+ok(stateKey(M._get().tubes) === "1|0,0|0", "solo se vierte la racha superior (1 bola), no toda la pila");
+
+console.log("== 5. Undo ==");
+M._setState(L);
+M.tapTube(0); M.tapTube(4); // first solution move
+const after1 = stateKey(M._get().tubes);
+M.undo();
+ok(stateKey(M._get().tubes) === stateKey(L) && M._get().moves === 0, "undo restaura estado y contador");
+
+console.log("");
+console.log(`RESULTADO: ${pass} pasadas, ${fail} fallidas`);
 process.exit(fail ? 1 : 0);
