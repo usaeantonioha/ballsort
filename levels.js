@@ -262,7 +262,7 @@ function buildCampaign() {
   return out;
 }
 
-if (typeof module === "object") module.exports = { buildCampaign, CAP, SPEC, bfs, solve, validate, generate, CURATED, key };
+if (typeof module === "object") module.exports = { buildCampaign, CAP, SPEC, bfs, solve, validate, generate, CURATED, key, applyMove, solved };
 
 if (require.main === module) {
   const campaign = buildCampaign();
