@@ -174,6 +174,22 @@ header{text-align:center;flex:0 0 auto;animation:rise .8s cubic-bezier(.2,.9,.3,
 .card p b{color:var(--text)}
 .medal{font-size:52px;margin-bottom:6px;display:inline-block;animation:spin 3s linear infinite}
 @keyframes spin{from{transform:rotateY(0)}to{transform:rotateY(360deg)}}
+
+/* ---------- mapa de niveles ---------- */
+.grid{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-top:8px}
+.cell{position:relative;aspect-ratio:1;border-radius:16px;border:1px solid var(--stroke);
+  background:var(--glass);color:var(--text);font-family:inherit;font-weight:700;font-size:18px;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;cursor:pointer;
+  transition:transform .15s, box-shadow .2s, border-color .2s;padding:4px}
+.cell small{font-weight:300;font-size:9px;letter-spacing:.04em;color:var(--dim);max-width:100%;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cell:not(:disabled):hover,.cell:not(:disabled):active{transform:scale(.94);border-color:#8be9ff88;
+  box-shadow:0 0 18px rgba(139,233,255,.35)}
+.cell.locked{opacity:.35;pointer-events:none}
+.cell.locked::after{content:"🔒";position:absolute;top:5px;right:7px;font-size:11px}
+.cell.doneT{border-color:#7ef4d466;background:linear-gradient(150deg,#00e0c022,#7b5cff22)}
+.cell.doneT::after{content:"⭐";position:absolute;top:4px;right:6px;font-size:11px}
+.cell.cur{outline:2px solid var(--accent);outline-offset:2px}
 </style>
 </head>
 <body>
@@ -186,7 +202,7 @@ header{text-align:center;flex:0 0 auto;animation:rise .8s cubic-bezier(.2,.9,.3,
 <div class="app">
   <header>
     <div class="logo">AURORA</div>
-    <div class="tag">ordena las esferas · <b>Nivel 1 — Aurora Boreal</b></div>
+    <div class="tag">ordena las esferas · <b id="lvl-name">Nivel 1</b></div>
 
     <!-- Panel de estadísticas: sigue siendo parte del bloque superior -->
     <div class="hud">
@@ -209,13 +225,29 @@ header{text-align:center;flex:0 0 auto;animation:rise .8s cubic-bezier(.2,.9,.3,
   </footer>
 </div>
 
+<!-- Overlay victoria -->
 <div class="win" id="win" role="dialog" aria-modal="true">
   <div class="card">
     <span class="medal">🏆</span>
     <h2>¡NIVEL COMPLETADO!</h2>
     <p id="wintext"></p>
-    <button class="btn primary" id="again" style="margin:0 auto">
-      <svg viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 3v6h-6"/></svg>Jugar de nuevo</button>
+    <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap">
+      <button class="btn" id="mapBtn" style="margin:0 auto">
+        <svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>Mapa</button>
+      <button class="btn primary" id="next" style="margin:0 auto">
+        <svg viewBox="0 0 24 24"><path d="M5 12h14"/><path d="m13 6 6 6-6 6"/></svg>Siguiente</button>
+    </div>
+  </div>
+</div>
+
+<!-- Mapa de niveles (1–10) -->
+<div class="win" id="map" role="dialog" aria-modal="true">
+  <div class="card">
+    <span class="medal">🌌</span>
+    <h2>AURORA</h2>
+    <p>Elige un nivel · desbloquea cada uno al completar el anterior</p>
+    <div class="grid" id="grid"></div>
+    <button class="btn" id="closemap" style="margin:18px auto 0">Cerrar</button>
   </div>
 </div>
 
@@ -233,31 +265,55 @@ header{text-align:center;flex:0 0 auto;animation:rise .8s cubic-bezier(.2,.9,.3,
    ============================================================ */
 
 /* ---------- CONFIG: paleta y ÚNICO nivel ---------- */
-const CAP = 4;
+const CAP = 4;                          // bolas por tubo (fijo en todos los niveles)
 const PALETTE = [                       // [brillo, cuerpo] por color
   ["#5ee6a8","#0f9d6e"],                // 0 menta
   ["#7ec8ff","#2563eb"],                // 1 celeste
   ["#c99bff","#7c3aed"],                // 2 violeta
   ["#ffa8d5","#e0447f"],                // 3 rosa
   ["#ffd97a","#e09a1f"],                // 4 ámbar
+  ["#ff8b6a","#d84315"],                // 5 coral
+  ["#67e8f9","#0891b2"],                // 6 cian
+  ["#f9a8d4","#db2777"],                // 7 fucsia
+  ["#bef264","#65a30d"],                // 8 lima
+  ["#fda4af","#e11d48"],                // 9 rubí
 ];
-/* NIVEL 1 — "Aurora Boreal": 7 tubos, 5 colores × 4 bolas = 20 bolas.
-   Tubos 0–4 llenos, 5 y 6 vacíos. Distribución FIJA (sin azar):
-   cada tubo tiene una bola de cada color excepto uno, más la extra.
-   Resolubilidad verificada por BFS exhaustivo con las reglas EXACTAS
-   del motor y replay tap-a-tap hasta la victoria (test_game.js). */
-const LEVEL_TUBES = [
-  [0,1,2,3],   // fondo menta → arriba rosa
-  [1,2,3,4],   // fondo celeste → arriba ámbar
-  [2,3,4,0],   // fondo violeta → arriba menta
-  [3,4,0,1],   // fondo rosa → arriba celeste
-  [4,0,1,2],   // fondo ámbar → arriba violeta
-  [],          // vacío
-  [],          // vacío
+/* ============================================================
+   10 NIVELES · dificultad escalada 1 → 10
+   Progresión: más colores/tubos y mezclado más caótico.
+   Cada nivel es una distribución FIJA (sin azar) cuya
+   resolubilidad fue verificada con BFS exhaustivo usando las
+   reglas EXACTAS del motor + replay tap-a-tap (test_game.js).
+   Formato: array de tubos; índice del array = posición en el
+   tubo, último elemento = bola superior. `[]` = tubo vacío.
+   ============================================================ */
+const LEVELS = [
+ {name:"Brisa Suave",     tubes:[[0],[1,0],[0,1],[],[]]},                                  // 1 · 2 colores · ~3 movs
+ {name:"Primer Luz",      tubes:[[0,1],[1,0],[0,1],[],[]]},                                // 2 · 2 colores · ~4 movs
+ {name:"Alba Serena",     tubes:[[0,1,2],[1,2,0],[2,0,1],[],[]]},                          // 3 · 3 colores · ~7 movs
+ {name:"Cintalita",       tubes:[[1,0,2,0],[0,2,1,1],[2,1,0,2],[],[]]},                    // 4 · 3 colores · ~10 movs
+ {name:"Aurora Boreal",   tubes:[[0,1,2,3],[1,2,3,4],[2,3,4,0],[3,4,0,1],[4,0,1,2],[],[]]},// 5 · 5 colores · ~16 movs
+ {name:"Viento Solar",    tubes:[[2,0,1,3],[0,3,2,1],[3,1,0,2],[1,2,3,0],[],[]]},          // 6 · 4 colores · ~18 movs
+ {name:"Campos Magnéticos",tubes:[[4,0,1,2],[1,3,4,0],[2,4,3,1],[0,2,0,3],[3,1,2,4],[],[]]},// 7 · 5 colores · ~24 movs
+ {name:"Cola de Cometa",  tubes:[[5,0,1,2],[3,4,5,0],[1,3,4,5],[2,1,0,4],[0,2,3,1],[],[]]},// 8 · 6 colores · ~28 movs
+ {name:"Cinturón Van Allen",tubes:[[6,0,1,2],[3,4,5,6],[1,2,3,4],[5,6,0,1],[2,3,4,5],[0,1,6,2],[],[]]}, // 9 · 7 colores
+ {name:"Gran Tormenta",   tubes:[[7,0,1,2],[3,4,5,6],[7,1,3,0],[5,2,6,4],[1,6,0,7],[4,2,5,3],[2,7,6,4],[],[]]}, // 10 · 8 colores
 ];
+/* Nivel actual (se cambia desde el mapa de niveles) */
+let levelIdx = 0;
+const curLevel = () => LEVELS[levelIdx];
+
+/* ---------- PROGRESO (localStorage) ---------- */
+/* progress = nº de niveles desbloqueados (1..10); bests = mejor marca por nivel */
+const store = {
+  get(){ try{ return JSON.parse(localStorage.getItem("aurora_progress")||"null") }catch(e){ return null } },
+  set(p){ try{ localStorage.setItem("aurora_progress", JSON.stringify(p)) }catch(e){} }
+};
+let prog = store.get() || { unlocked: 1, bests: {} };
+const levelKey = () => "L" + (levelIdx+1);
 
 /* ---------- ESTADO ---------- */
-let tubes, sel, moves, history, startT, timerId, won, soundOn = true;
+let tubes, sel, moves, history, startT, timerId, won, soundOn = true, busy = false;
 const $ = id => document.getElementById(id);
 const boardEl = $("board");
 
@@ -417,19 +473,25 @@ function burst(el){
 function fmt(ms){ const s=Math.floor(ms/1000); return `${Math.floor(s/60)}:${String(s%60).padStart(2,"0")}`; }
 function updateHud(){
   $("moves").textContent = moves;
-  const best = localStorage.getItem("aurora_best");
+  const best = prog.bests[levelKey()];
   $("best").textContent = best ? best : "—";
+  $("lvl-name").textContent = `Nivel ${levelIdx+1} — ${curLevel().name}`;
 }
 
 /* ---------- VICTORIA ---------- */
 function victory(){
   won = true; clearInterval(timerId);
   const secs = startT ? Math.floor((Date.now()-startT)/1000) : 0;
-  const best = parseInt(localStorage.getItem("aurora_best")||"9999",10);
-  if(moves < best) localStorage.setItem("aurora_best", moves);
+  const prev = prog.bests[levelKey()];
+  if(!prev || moves < prev) prog.bests[levelKey()] = moves;      // mejor marca por nivel
+  if(levelIdx+1 >= prog.unlocked && prog.unlocked < LEVELS.length)
+    prog.unlocked = levelIdx + 2;                                 // desbloquea el siguiente
+  store.set(prog);
   updateHud();
+  const last = levelIdx === LEVELS.length-1;
+  $("next").style.display = last ? "none" : "";                   // sin "Siguiente" tras el 10
   $("wintext").innerHTML =
-    `Completaste <b>Aurora Boreal</b> en <b>${moves}</b> movimientos<br>y <b>${fmt(secs*1000)}</b>. El cielo vuelve a brillar.`;
+    `Completaste <b>${curLevel().name}</b> en <b>${moves}</b> movimientos<br>y <b>${fmt(secs*1000)}</b>. El cielo vuelve a brillar.`;
   setTimeout(()=>{ $("win").classList.add("show"); sfx.win(); starRain(); }, 500);
 }
 function starRain(){
@@ -452,18 +514,42 @@ function starRain(){
   }
 }
 
+/* ---------- MAPA DE NIVELES ---------- */
+function renderMap(){
+  const grid = $("grid");
+  grid.innerHTML = "";
+  LEVELS.forEach((lv,i)=>{
+    const c = document.createElement("button");
+    const locked = i+1 > prog.unlocked;
+    const done   = !!prog.bests["L"+(i+1)];
+    c.className = "cell" + (locked?" locked":"") + (done?" doneT":"") + (i===levelIdx?" cur":"");
+    c.disabled = locked;
+    c.setAttribute("aria-label", `Nivel ${i+1} ${lv.name}${locked?" bloqueado":""}`);
+    c.innerHTML = `${i+1}<small>${lv.name}</small>`;
+    if(!locked) c.addEventListener("click", ()=>{
+      $("map").classList.remove("show");
+      $("win").classList.remove("show");
+      startLevel(i);
+    });
+    grid.appendChild(c);
+  });
+}
+
 /* ---------- INIT / BOTONES ---------- */
-function newGame(){
-  tubes = clone(LEVEL_TUBES);
-  sel = null; moves = 0; history = []; won = false; lastDest = -1;
+function startLevel(i){                 // carga el nivel i (0-based) y reinicia todo
+  levelIdx = Math.max(0, Math.min(LEVELS.length-1, i));
+  tubes = clone(curLevel().tubes);
+  sel = null; moves = 0; history = []; won = false; lastDest = -1; busy = false;
   startT = 0; clearInterval(timerId);
   $("time").textContent = "0:00";
   $("win").classList.remove("show");
   render(); updateHud();
 }
 $("undo").addEventListener("click", undo);
-$("reset").addEventListener("click", newGame);
-$("again").addEventListener("click", newGame);
+$("reset").addEventListener("click", ()=>startLevel(levelIdx));   // reinicia el nivel actual
+$("next").addEventListener("click", ()=>startLevel(levelIdx+1));  // avanza en la campaña
+$("mapBtn").addEventListener("click", ()=>{ renderMap(); $("map").classList.add("show"); });
+$("closemap").addEventListener("click", ()=> $("map").classList.remove("show"));
 $("sound").addEventListener("click", e=>{
   soundOn = !soundOn;
   const b = e.currentTarget;
@@ -472,16 +558,17 @@ $("sound").addEventListener("click", e=>{
   if(soundOn) sfx.pick();
 });
 document.addEventListener("pointerdown", ()=>{ if(AC && AC.state==="suspended") AC.resume(); });
-newGame();
+startLevel(Math.min(prog.unlocked, LEVELS.length) - 1);           // arranca en el último desbloqueado
 
 /* ---- export para pruebas automatizadas (node) ---- */
 if(typeof module==="object" && module && typeof module.exports==="object"){
   module.exports = {
-    CAP, LEVEL_TUBES, PALETTE,
+    CAP, LEVELS, PALETTE,
     _setState(t){ tubes = clone(t); sel=null; moves=0; history=[]; won=false;
                   startT=0; clearInterval(timerId); timerId=null; lastDest=-1; },
+    _startLevel: startLevel,
     tapTube, canPour, pourCount, isSolved, undo, topOf,
-    _get(){ return { tubes: clone(tubes), sel, moves, won }; }
+    _get(){ return { tubes: clone(tubes), sel, moves, won, levelIdx }; }
   };
 }
 </script>

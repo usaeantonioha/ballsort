@@ -1,0 +1,5 @@
+nohup: ignoring input
+Nivel 1: [[0,1],[],[1,0],[],[]]  // optimo=null
+Nivel 2: [[0,1],[1,0],[0,1],[],[]]  // optimo=null
+Nivel 3: [[0,1,2],[1,2,0],[2,0,1],[],[]]  // optimo=null
+Nivel 4: [[1,0,2,0],[0,2,1,1],[2,1,0,2],[],[]]  // optimo=9
