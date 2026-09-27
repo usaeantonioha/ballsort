@@ -1,147 +1,128 @@
 "use strict";
-/* Automated tap-by-tap replay of index.html game logic under a DOM stub. */
+/* ============================================================
+   test_game.js — verificación automatizada de AURORA (index.html)
+   1) Ejecuta el <script> real del juego con un DOM simulado.
+   2) Comprueba invariantes del nivel (bolas, colores, capacidad).
+   3) BFS con las reglas EXACTAS → replay tap-a-tap contra el motor.
+   4) Reglas de bloqueo/selección, undo, contadores y victoria.
+   ============================================================ */
+const fs = require("fs");
 
-// ---------- minimal DOM stub ----------
-function makeEl(tag) {
-  return {
-    tag, children: [], style: { setProperty(){} }, dataset: {},
-    classList: { _s:new Set(), add(c){this._s.add(c);}, remove(c){this._s.delete(c);}, contains(c){return this._s.has(c);} },
-    setAttribute(){}, addEventListener(ev, fn){ this._on = this._on||{}; this._on[ev]=fn; },
-    insertAdjacentHTML(pos, html){
-      // parse balls minimally: count spans with class ball and capture bottom% & lift
-      const m = [...html.matchAll(/class="ball([^"]*)"[^>]*bottom:([\d.]+)%/g)];
-      for (const g of m) this.children.push({ className:"ball"+g[1], bottom: parseFloat(g[2]), isSpark:false });
-    },
-    appendChild(ch){ this.children.push(ch); },
-    remove(){}, textContent:"", innerHTML:"", disabled:false, lastChild:{}, offsetWidth:0
-  };
+/* ---------- DOM simulado mínimo ---------- */
+function makeEl(tag){
+  const el = { tag, children: [], style:{ setProperty(){} }, dataset:{},
+    classList:{ _s:new Set(), add(c){this._s.add(c)}, remove(c){this._s.delete(c)}, contains(c){return this._s.has(c)} },
+    get className(){ return [...this.classList._s].join(" "); },
+    set className(v){ this.classList._s = new Set(String(v).split(/\s+/).filter(Boolean)); },
+    setAttribute(){}, addEventListener(ev,fn){ this._on=this._on||{}; this._on[ev]=fn; },
+    insertAdjacentHTML(){}, appendChild(ch){ this.children.push(ch); }, remove(){},
+    textContent:"", disabled:false, lastChild:{}, offsetWidth:0 };
+  Object.defineProperty(el,"innerHTML",{ get(){return el._h||""}, set(v){ el._h=v; if(v==="") el.children=[]; } });
+  return el;
 }
 const ids = {};
-["board","moves","best","time","undo","reset","sound","win","wintext","again","lvl-name"].forEach(i=>ids[i]=makeEl("div"));
-global.document = {
-  getElementById: id => ids[id] || (ids[id]=makeEl("div")),
-  createElement: t => makeEl(t),
-  addEventListener(){},
-  body: makeEl("body"),
-};
+global.document = { getElementById:id=>ids[id]||(ids[id]=makeEl("div")),
+  createElement:t=>makeEl(t), addEventListener(){}, body:makeEl("body") };
 global.window = { addEventListener(){}, AudioContext:null, webkitAudioContext:null };
-global.localStorage = { _d:{}, getItem(k){return this._d[k]??null;}, setItem(k,v){this._d[k]=String(v);} };
-global.setInterval = () => 0;
-global.clearInterval = () => {};
-global.setTimeout = (fn) => { try{ fn(); }catch(e){} return 0; };
-global.module = { exports: {} };
+global.localStorage = { _d:{}, getItem(k){return this._d[k]??null}, setItem(k,v){this._d[k]=String(v)} };
+global.setInterval = ()=>0; global.clearInterval = ()=>{};
+global.setTimeout = (fn)=>{ try{ fn(); }catch(e){} return 0; };
+global.module = { exports:{} };
 
-// ---------- load game script from index.html ----------
-const fs = require("fs");
-const src = fs.readFileSync(__dirname + "/index.html", "utf8");
-const js = src.split("<script>")[1].split("</scr" + "ipt>")[0];
+/* ---------- cargar el script REAL del juego ---------- */
+const html = fs.readFileSync(__dirname + "/index.html", "utf8");
+const js = html.split("<script>")[1].split("</scr"+"ipt>")[0];
 eval(js);
 const M = module.exports;
+const CAP = M.CAP, L = M.LEVEL_TUBES;
 
-let pass = 0, fail = 0;
-function ok(cond, msg){ if(cond){pass++; console.log("  PASS:", msg);} else {fail++; console.log("  FAIL:", msg);} }
+let pass=0, fail=0;
+const ok=(c,m)=>{ c?(pass++,console.log("  PASS:",m)):(fail++,console.log("  FAIL:",m)); };
+const key = s => s.map(t=>t.join(",")).join("|");
 
-// ---------- BFS solver replicating the engine's EXACT rules ----------
-const CAP = M.CAP;
-const clone = a => a.map(x => x.slice());
-const topOf = t => { for(let i=t.length-1;i>=0;i--) if(t[i]!==null) return i; return -1; };
-function pourCountC(nt,f,t){ const ti=topOf(nt[f]); if(ti<0)return 0; const col=nt[f][ti]; let n=0; for(let i=ti;i>=0&&nt[f][i]===col;i--)n++; return Math.min(n, CAP-nt[t].length); }
-function applyMove(s,f,t){ if(f===t)return null; if(s[t].length>=CAP)return null; const ti=topOf(s[f]); if(ti<0)return null; const si=topOf(s[t]); if(si>=0 && s[f][ti]!==s[t][si])return null;
-  const nt=clone(s); const k=pourCountC(nt,f,t); if(k<=0)return null; const col=nt[f][topOf(nt[f])]; for(let i=0;i<k;i++){nt[f].pop();nt[t].push(col);} 
-  // invariant: no trailing nulls
-  for(const tu of nt){ while(tu.length && tu[tu.length-1]===null) tu.pop(); }
-  return nt; }
-const stateKey = s => s.map(t=>t.join(",")).join("|");
-function solvedC(tu){ return tu.every(t => t.length===0 || (t.length===CAP && t.every(b=>b===t[0]))); }
+/* ---------- BFS replicando las reglas exactas del motor ---------- */
+function applyMove(s,f,t){
+  if(f===t) return null;
+  const src=s[f], dst=s[t];
+  if(!src.length || dst.length>=CAP) return null;
+  const c=src[src.length-1];
+  if(dst.length && dst[dst.length-1]!==c) return null;
+  let run=0; for(let i=src.length-1;i>=0&&src[i]===c;i--) run++;
+  const k=Math.min(run,CAP-dst.length); if(k<=0) return null;
+  const r=s.map(x=>x.slice());
+  r[f]=src.slice(0,src.length-k); r[t]=dst.concat(Array(k).fill(c));
+  return r;
+}
+const solvedC = s => s.every(t=>!t.length || (t.length===CAP && t.every(b=>b===t[0])));
 function solve(init){
-  const seen=new Set([stateKey(init)]); let frontier=[{s:init,path:[]}];
-  while(frontier.length){ const next=[];
-    for(const node of frontier){
-      for(let f=0;f<node.s.length;f++)for(let t=0;t<node.s.length;t++){
-        const ns=applyMove(node.s,f,t); if(!ns)continue; const k=stateKey(ns); if(seen.has(k))continue; seen.add(k);
-        const path=node.path.concat([[f,t]]); if(solvedC(ns))return path; next.push({s:ns,path});
-      }
+  const seen=new Set([key(init)]); let q=[{s:init,p:[]}];
+  while(q.length){ const nx=[];
+    for(const n of q) for(let f=0;f<n.s.length;f++) for(let t=0;t<n.s.length;t++){
+      const ns=applyMove(n.s,f,t); if(!ns) continue; const k=key(ns); if(seen.has(k)) continue;
+      seen.add(k); const p=n.p.concat([[f,t]]);
+      if(solvedC(ns)) return p; nx.push({s:ns,p});
     }
-    frontier=next;
+    q=nx;
   }
   return null;
 }
 
-console.log("== 1. Level integrity ==");
-const L = M.LEVEL_TUBES;
-const counts = {};
-L.forEach(t=>t.forEach(b=>counts[b]=(counts[b]||0)+1));
-ok(Object.keys(counts).length === M.PALETTE.length, `usa los ${M.PALETTE.length} colores de la paleta`);
-ok(Object.values(counts).every(c=>c===CAP), `cada color tiene exactamente ${CAP} bolas: ${JSON.stringify(counts)}`);
-ok(L.every(t=>t.length<=CAP), "ningún tubo excede la capacidad");
-ok(L.filter(t=>t.length===0).length >= 2, "hay al menos 2 tubos vacíos");
-ok(L.every(t=>t.length===0 || t.every(b=>typeof b==="number" && b>=0 && b<M.PALETTE.length)), "todos los índices de color válidos");
+console.log("== 1. Invariantes del nivel único ==");
+ok(L.length===7, "el nivel tiene exactamente 7 tubos");
+const counts={}; L.forEach(t=>t.forEach(b=>counts[b]=(counts[b]||0)+1));
+ok(Object.keys(counts).length===M.PALETTE.length, `usa los ${M.PALETTE.length} colores de la paleta`);
+ok(Object.values(counts).every(c=>c===CAP), `cada color aparece exactamente ${CAP} veces: ${JSON.stringify(counts)}`);
+ok(L.every(t=>t.length<=CAP), "ningún tubo excede la capacidad máxima de 4 bolas");
+ok(L.filter(t=>!t.length).length===2, "hay exactamente 2 tubos vacíos");
 
-console.log("== 2. Solvability (BFS bajo reglas exactas del motor) ==");
-const sol = solve(clone(L));
-ok(sol !== null, sol ? `nivel RESOLUBLE en ${sol.length} movimientos: ${sol.map(m=>m.join("→")).join(", ")}` : "nivel INSOLUBLE");
+console.log("== 2. Resolubilidad (BFS con reglas exactas) ==");
+const sol = solve(L.map(t=>t.slice()));
+ok(!!sol, sol ? `nivel RESOLUBLE en ${sol.length} movimientos óptimos` : "nivel INSOLUBLE");
 
-console.log("== 3. Tap-by-tap replay usando la función tapTube REAL ==");
+console.log("== 3. Replay tap-a-tap contra el motor REAL ==");
 M._setState(L);
-let st = M._get();
-ok(st.tubes.map(t=>t.length).join(",") === L.map(t=>t.length).join(","), "estado inicial restaurado");
-
-// helper: perform a real tap pair through the shipped tapTube()
-function tapPair(f,t){
-  M.tapTube(f);            // select source
-  const mid = M._get();
-  if(mid.sel !== f) return false;
-  M.tapTube(t);            // pour into target
-  return true;
+let bad=null, done=0;
+for(const [f,t] of (sol||[])){
+  const before=M._get().tubes;
+  const expected=applyMove(before,f,t);
+  M.tapTube(f);
+  if(M._get().sel!==f){ bad=`tap ${f} no seleccionó`; break; }
+  M.tapTube(t);
+  const after=M._get();
+  if(key(after.tubes)!==key(expected)){ bad=`desfase tras ${f}→${t}`; break; }
+  if(after.tubes.some(x=>x.length>CAP)){ bad="tubo desbordado"; break; }
+  const tot=after.tubes.reduce((a,x)=>a+x.length,0);
+  if(tot!==CAP*M.PALETTE.length){ bad=`conservación rota: ${tot} bolas`; break; }
+  done++;
 }
-let movesDone = 0, badStep = null;
-for (const [f,t] of (sol||[])) {
-  const before = stateKey(M._get().tubes);
-  const expected = stateKey(applyMove(M._get().tubes, f, t));
-  if (!tapPair(f,t)) { badStep = `tap ${f}→${t} rechazado por el motor`; break; }
-  const after = stateKey(M._get().tubes);
-  if (after !== expected) { badStep = `discrepancia tras ${f}→${t}: motor=${after} esperado=${expected}`; break; }
-  // invariants after every move
-  const tubes = M._get().tubes;
-  for (const tu of tubes) {
-    if (tu.length > CAP) { badStep = "tubo desbordado"; break; }
-    if (tu.includes(null)) { badStep = "agujero null dentro de un tubo"; break; }
-  }
-  const tot = tubes.reduce((a,t)=>a+t.length,0);
-  if (tot !== CAP*M.PALETTE.length) { badStep = `conservación rota: ${tot} bolas`; break; }
-  movesDone++;
-}
-ok(badStep === null, badStep ?? `replay completo sin errores (${movesDone}/${(sol||[]).length} volcados)`);
-ok(M._get().won === true, "el juego declaró VICTORIA tras el último movimiento");
-ok(M._get().moves === (sol||[]).length, `contador de movimientos = ${(sol||[]).length}`);
+ok(!bad, bad ?? `replay completo sin errores (${done}/${(sol||[]).length} volcados)`);
+ok(M._get().won===true, "VICTORIA declarada al terminar el replay");
+ok(M._get().moves===(sol||[]).length, `MOVIMIENTOS = ${(sol||[]).length} (uno por volcado válido)`);
 
-console.log("== 4. Reglas de bloqueo y selección ==");
+console.log("== 4. Reglas de selección y bloqueo ==");
 M._setState(L);
-// tap empty tube → nothing selected
-M.tapTube(L.findIndex(t=>t.length===0));
-ok(M._get().sel === null, "tocar tubo vacío no selecciona nada");
-// select tube 0 then tap it again → deselect
-M.tapTube(0); ok(M._get().sel === 0, "tocar tubo con bolas lo selecciona");
-M.tapTube(0); ok(M._get().sel === null, "tocarlo de nuevo lo deselecciona");
-// invalid pour: tube0 top=3, tube1 top=0 → cannot pour; tapping tube1 should switch selection to tube1
+M.tapTube(5); ok(M._get().sel===null, "tap en tubo vacío no selecciona nada");
+M.tapTube(0); ok(M._get().sel===0, "tap en tubo con bolas selecciona la superior");
+M.tapTube(0); ok(M._get().sel===null, "segundo tap en el mismo tubo deselecciona");
+// inválido: top(0)=3 vs top(1)=4 → no vierte, re-selecciona destino
 M.tapTube(0); M.tapTube(1);
-const g = M._get();
-ok(g.sel === 1 && stateKey(g.tubes) === stateKey(L), "volcado inválido no mueve bolas y re-selecciona el tubo tocado");
-// valid partial pour semantics: pourCount caps at run length and free space
-M._setState([[0,0,1,1],[0,0,1,1],[],[]]);
+ok(M._get().sel===1 && key(M._get().tubes)===key(L), "volcado inválido no mueve bolas y re-selecciona");
+// destino lleno: llenar tubo 5 con 4 mentas y bloquear vertido a él
+M._setState([[0],[0,0,0,0],[0],[],[],[],[]]);
+M.tapTube(2); M.tapTube(1);
+ok(M._get().sel===1 && M._get().moves===0, "no se puede verter en un tubo lleno (4 esferas)");
+// semántica de racha: solo se vierte la racha superior
+M._setState([[1,0,0,0],[2,0],[],[]]);
 M.tapTube(0); M.tapTube(2);
-ok(stateKey(M._get().tubes) === "0,0|0,0,1,1|1,1|", "run de 2 bolas idénticas se vierte completo en tubo vacío");
-M._setState([[1,0],[0,0],[]]); // top of 0 is 0, run length 1
-M.tapTube(0); M.tapTube(2);
-ok(stateKey(M._get().tubes) === "1|0,0|0", "solo se vierte la racha superior (1 bola), no toda la pila");
+ok(key(M._get().tubes)==="1|2,0|0,0,0|", "se vierte la racha superior completa (3 ceros), no toda la pila");
 
-console.log("== 5. Undo ==");
+console.log("== 5. Deshacer / Reiniciar ==");
 M._setState(L);
-M.tapTube(0); M.tapTube(4); // first solution move
-const after1 = stateKey(M._get().tubes);
+M.tapTube(0); M.tapTube(5);            // movimiento válido 0→5
+ok(M._get().moves===1, "MOVIMIENTOS incrementa SOLO con movimiento válido");
 M.undo();
-ok(stateKey(M._get().tubes) === stateKey(L) && M._get().moves === 0, "undo restaura estado y contador");
+ok(key(M._get().tubes)===key(L) && M._get().moves===0, "Deshacer revierte estado y contador (pila)");
+M.undo(); ok(M._get().moves===0, "Deshacer con historial vacío es inofensivo");
 
-console.log("");
-console.log(`RESULTADO: ${pass} pasadas, ${fail} fallidas`);
-process.exit(fail ? 1 : 0);
+console.log(`\nRESULTADO: ${pass} pasadas, ${fail} fallidas`);
+process.exit(fail?1:0);
